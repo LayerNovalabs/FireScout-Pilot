@@ -15,6 +15,8 @@ L.tileLayer(
 
 
 const assetMarkers = new Map();
+const eventMarkers = new Map();
+
 let mapHasCentered = false;
 
 
@@ -36,8 +38,21 @@ function getBatteryClass(battery) {
 }
 
 
-function getMarkerColor(asset) {
+function getAssetMarkerColor(asset) {
     if (asset.status === "warning") {
+        return "#f59e0b";
+    }
+
+    return "#38bdf8";
+}
+
+
+function getEventColor(operationalEvent) {
+    if (operationalEvent.severity === "critical") {
+        return "#ef4444";
+    }
+
+    if (operationalEvent.severity === "warning") {
         return "#f59e0b";
     }
 
@@ -55,7 +70,7 @@ function updateAssetMarker(asset) {
         asset.telemetry.longitude,
     ];
 
-    const markerColor = getMarkerColor(asset);
+    const markerColor = getAssetMarkerColor(asset);
     let marker = assetMarkers.get(asset.id);
 
     const popupContent = `
@@ -102,12 +117,95 @@ function updateAssetMarker(asset) {
 }
 
 
+function updateEventMarker(operationalEvent) {
+    const existingMarker = eventMarkers.get(
+        operationalEvent.id
+    );
+
+    if (!operationalEvent.active) {
+        if (existingMarker) {
+            map.removeLayer(existingMarker);
+            eventMarkers.delete(operationalEvent.id);
+        }
+
+        return;
+    }
+
+    const position = [
+        operationalEvent.latitude,
+        operationalEvent.longitude,
+    ];
+
+    const markerColor = getEventColor(
+        operationalEvent
+    );
+
+    const confidence = Math.round(
+        operationalEvent.confidence * 100
+    );
+
+    const popupContent = `
+        <strong>🔥 ${operationalEvent.title}</strong><br>
+        ${operationalEvent.description}<br>
+        Severity:
+        ${capitalize(operationalEvent.severity)}<br>
+        Confidence: ${confidence}%
+    `;
+
+    let marker = existingMarker;
+
+    if (!marker) {
+        marker = L.circle(
+            position,
+            {
+                radius: 120,
+                color: markerColor,
+                fillColor: markerColor,
+                fillOpacity: 0.3,
+                weight: 3,
+            }
+        ).addTo(map);
+
+        marker.bindTooltip(
+            `🔥 ${operationalEvent.title}`,
+            {
+                permanent: true,
+                direction: "top",
+            }
+        );
+
+        marker.bindPopup(popupContent);
+
+        eventMarkers.set(
+            operationalEvent.id,
+            marker
+        );
+    } else {
+        marker.setLatLng(position);
+
+        marker.setStyle({
+            color: markerColor,
+            fillColor: markerColor,
+        });
+
+        marker.setTooltipContent(
+            `🔥 ${operationalEvent.title}`
+        );
+
+        marker.setPopupContent(popupContent);
+    }
+}
+
+
 function centerMapOnce() {
     if (mapHasCentered || assetMarkers.size === 0) {
         return;
     }
 
-    const markers = Array.from(assetMarkers.values());
+    const markers = Array.from(
+        assetMarkers.values()
+    );
+
     const markerGroup = L.featureGroup(markers);
 
     map.fitBounds(
@@ -132,11 +230,15 @@ async function refreshAssets() {
         );
 
         if (!response.ok) {
-            throw new Error(`HTTP error: ${response.status}`);
+            throw new Error(
+                `HTTP error: ${response.status}`
+            );
         }
 
         const assets = await response.json();
-        const cards = document.querySelectorAll(".asset");
+        const cards = document.querySelectorAll(
+            ".asset"
+        );
 
         assets.forEach((asset, index) => {
             const card = cards[index];
@@ -209,85 +311,6 @@ async function refreshAssets() {
 }
 
 
-refreshAssets();
-setInterval(refreshAssets, 2000);
-const eventMarkers = new Map();
-
-
-function getEventColor(event) {
-    if (event.severity === "critical") {
-        return "#ef4444";
-    }
-
-    if (event.severity === "warning") {
-        return "#f59e0b";
-    }
-
-    return "#38bdf8";
-}
-
-
-function updateEventMarker(event) {
-    if (!event.active) {
-        return;
-    }
-
-    const position = [
-        event.latitude,
-        event.longitude,
-    ];
-
-    const color = getEventColor(event);
-    let marker = eventMarkers.get(event.id);
-
-    const confidence = Math.round(event.confidence * 100);
-
-    const popupContent = `
-        <strong>🔥 ${event.title}</strong><br>
-        ${event.description}<br>
-        Severity: ${capitalize(event.severity)}<br>
-        Confidence: ${confidence}%
-    `;
-
-    if (!marker) {
-        marker = L.circle(
-            position,
-            {
-                radius: 120,
-                color: color,
-                fillColor: color,
-                fillOpacity: 0.3,
-                weight: 3,
-            }
-        ).addTo(map);
-
-        marker.bindTooltip(
-            `🔥 ${event.title}`,
-            {
-                permanent: true,
-                direction: "top",
-            }
-        );
-
-        marker.bindPopup(popupContent);
-        eventMarkers.set(event.id, marker);
-    } else {
-        marker.setLatLng(position);
-
-        marker.setStyle({
-            color: color,
-            fillColor: color,
-        });
-
-        marker.setTooltipContent(
-            `🔥 ${event.title}`
-        );
-
-        marker.setPopupContent(popupContent);
-    }
-}
-
-
 async function refreshEvents() {
     try {
         const response = await fetch(
@@ -305,8 +328,8 @@ async function refreshEvents() {
 
         const events = await response.json();
 
-        events.forEach((event) => {
-            updateEventMarker(event);
+        events.forEach((operationalEvent) => {
+            updateEventMarker(operationalEvent);
         });
     } catch (error) {
         console.error(
@@ -317,5 +340,8 @@ async function refreshEvents() {
 }
 
 
+refreshAssets();
 refreshEvents();
+
+setInterval(refreshAssets, 2000);
 setInterval(refreshEvents, 5000);

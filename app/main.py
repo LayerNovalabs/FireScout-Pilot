@@ -4,7 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.models.asset import Asset, AssetStatus, AssetType
+from app.models.event import OperationalEvent
 from app.services.simulator import get_simulated_assets
+from app.services.wildfire_events import get_wildfire_events
 
 
 app = FastAPI(
@@ -63,3 +65,8 @@ def get_demo_asset() -> Asset:
 @app.get("/assets", response_model=list[Asset])
 def get_assets() -> list[Asset]:
     return get_simulated_assets()
+
+
+@app.get("/events", response_model=list[OperationalEvent])
+def get_events() -> list[OperationalEvent]:
+    return get_wildfire_events()
