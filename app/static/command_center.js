@@ -211,3 +211,111 @@ async function refreshAssets() {
 
 refreshAssets();
 setInterval(refreshAssets, 2000);
+const eventMarkers = new Map();
+
+
+function getEventColor(event) {
+    if (event.severity === "critical") {
+        return "#ef4444";
+    }
+
+    if (event.severity === "warning") {
+        return "#f59e0b";
+    }
+
+    return "#38bdf8";
+}
+
+
+function updateEventMarker(event) {
+    if (!event.active) {
+        return;
+    }
+
+    const position = [
+        event.latitude,
+        event.longitude,
+    ];
+
+    const color = getEventColor(event);
+    let marker = eventMarkers.get(event.id);
+
+    const confidence = Math.round(event.confidence * 100);
+
+    const popupContent = `
+        <strong>🔥 ${event.title}</strong><br>
+        ${event.description}<br>
+        Severity: ${capitalize(event.severity)}<br>
+        Confidence: ${confidence}%
+    `;
+
+    if (!marker) {
+        marker = L.circle(
+            position,
+            {
+                radius: 120,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.3,
+                weight: 3,
+            }
+        ).addTo(map);
+
+        marker.bindTooltip(
+            `🔥 ${event.title}`,
+            {
+                permanent: true,
+                direction: "top",
+            }
+        );
+
+        marker.bindPopup(popupContent);
+        eventMarkers.set(event.id, marker);
+    } else {
+        marker.setLatLng(position);
+
+        marker.setStyle({
+            color: color,
+            fillColor: color,
+        });
+
+        marker.setTooltipContent(
+            `🔥 ${event.title}`
+        );
+
+        marker.setPopupContent(popupContent);
+    }
+}
+
+
+async function refreshEvents() {
+    try {
+        const response = await fetch(
+            "/events",
+            {
+                cache: "no-store",
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP error: ${response.status}`
+            );
+        }
+
+        const events = await response.json();
+
+        events.forEach((event) => {
+            updateEventMarker(event);
+        });
+    } catch (error) {
+        console.error(
+            "Unable to update events:",
+            error
+        );
+    }
+}
+
+
+refreshEvents();
+setInterval(refreshEvents, 5000);
