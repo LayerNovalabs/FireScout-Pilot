@@ -103,7 +103,11 @@ function updateAssetMarker(asset) {
         );
 
         marker.bindPopup(popupContent);
-        assetMarkers.set(asset.id, marker);
+
+        assetMarkers.set(
+            asset.id,
+            marker
+        );
     } else {
         marker.setLatLng(position);
 
@@ -147,8 +151,7 @@ function updateEventMarker(operationalEvent) {
     const popupContent = `
         <strong>🔥 ${operationalEvent.title}</strong><br>
         ${operationalEvent.description}<br>
-        Severity:
-        ${capitalize(operationalEvent.severity)}<br>
+        Severity: ${capitalize(operationalEvent.severity)}<br>
         Confidence: ${confidence}%
     `;
 
@@ -236,6 +239,7 @@ async function refreshAssets() {
         }
 
         const assets = await response.json();
+
         const cards = document.querySelectorAll(
             ".asset"
         );
@@ -311,6 +315,64 @@ async function refreshAssets() {
 }
 
 
+function renderEventAlerts(events) {
+    const eventsList = document.getElementById(
+        "events-list"
+    );
+
+    if (!eventsList) {
+        return;
+    }
+
+    const activeEvents = events.filter(
+        (operationalEvent) => operationalEvent.active
+    );
+
+    eventsList.innerHTML = "";
+
+    if (activeEvents.length === 0) {
+        eventsList.innerHTML = `
+            <div class="event-alert-description">
+                No active operational alerts.
+            </div>
+        `;
+
+        return;
+    }
+
+    activeEvents.forEach((operationalEvent) => {
+        const confidence = Math.round(
+            operationalEvent.confidence * 100
+        );
+
+        const alertElement =
+            document.createElement("div");
+
+        alertElement.className = "event-alert";
+
+        alertElement.innerHTML = `
+            <div>
+                <div class="event-alert-title">
+                    🔥 ${operationalEvent.title}
+                </div>
+
+                <div class="event-alert-description">
+                    ${operationalEvent.description}
+                    · Severity:
+                    ${capitalize(operationalEvent.severity)}
+                </div>
+            </div>
+
+            <div class="event-alert-confidence">
+                ${confidence}%
+            </div>
+        `;
+
+        eventsList.appendChild(alertElement);
+    });
+}
+
+
 async function refreshEvents() {
     try {
         const response = await fetch(
@@ -331,6 +393,8 @@ async function refreshEvents() {
         events.forEach((operationalEvent) => {
             updateEventMarker(operationalEvent);
         });
+
+        renderEventAlerts(events);
     } catch (error) {
         console.error(
             "Unable to update events:",
