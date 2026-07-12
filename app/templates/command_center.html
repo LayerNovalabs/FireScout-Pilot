@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>FireScout Command Center</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #e6edf3;
+            background: #08111f;
+        }
+
+        header {
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 28px;
+            border-bottom: 1px solid #26364a;
+            background: #0d1828;
+        }
+
+        .brand {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .brand span {
+            color: #38bdf8;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #9caec2;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+        }
+
+        main {
+            padding: 24px;
+        }
+
+        .mission-header {
+            margin-bottom: 20px;
+        }
+
+        .mission-header h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        .mission-header p {
+            margin: 0;
+            color: #8fa3b8;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 260px minmax(400px, 1fr) 320px;
+            gap: 18px;
+            min-height: 620px;
+        }
+
+        .panel {
+            padding: 20px;
+            border: 1px solid #26364a;
+            border-radius: 12px;
+            background: #101d2e;
+        }
+
+        .panel h2 {
+            margin: 0 0 18px;
+            font-size: 15px;
+            color: #9fb3c8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .mission-name {
+            margin-top: 25px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .mission-state {
+            display: inline-block;
+            margin-top: 14px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            color: #86efac;
+            background: #153c2b;
+        }
+
+        .mission-information {
+            margin-top: 32px;
+        }
+
+        .information-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            color: #8ea3b9;
+            font-size: 14px;
+        }
+
+        .information-row strong {
+            color: #e6edf3;
+        }
+
+        .map-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .map-placeholder {
+            flex: 1;
+            min-height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px dashed #3c5067;
+            border-radius: 10px;
+            color: #748ba3;
+            background:
+                radial-gradient(
+                    circle at center,
+                    rgba(56, 189, 248, 0.08),
+                    transparent 55%
+                ),
+                #0a1523;
+        }
+
+        .map-message {
+            text-align: center;
+        }
+
+        .map-message strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #9fb3c8;
+            font-size: 18px;
+        }
+
+        .asset {
+            margin-bottom: 14px;
+            padding: 14px;
+            border: 1px solid #293d54;
+            border-radius: 9px;
+            background: #0b1726;
+        }
+
+        .asset:last-child {
+            margin-bottom: 0;
+        }
+
+        .asset-name {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-weight: 700;
+        }
+
+        .asset-details {
+            margin-top: 9px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #8ea3b9;
+        }
+
+        .asset-position {
+            margin-top: 7px;
+            font-size: 12px;
+            color: #687f97;
+        }
+
+        .battery-warning {
+            color: #fbbf24;
+        }
+
+        .battery-critical {
+            color: #f87171;
+        }
+
+        .status-active {
+            color: #86efac;
+        }
+
+        .status-warning {
+            color: #fbbf24;
+        }
+
+        @media (max-width: 1050px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .map-placeholder {
+                min-height: 420px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="brand">
+            Fire<span>Scout</span>
+        </div>
+
+        <div class="system-status">
+            <span class="status-dot"></span>
+            System Online
+        </div>
+    </header>
+
+    <main>
+        <section class="mission-header">
+            <h1>Command Center</h1>
+
+            <p>
+                Real-time emergency intelligence and mission coordination
+            </p>
+        </section>
+
+        <section class="dashboard-grid">
+            <aside class="panel">
+                <h2>Mission</h2>
+
+                <div class="mission-name">
+                    Wildfire
+                </div>
+
+                <div class="mission-state">
+                    Active
+                </div>
+
+                <div class="mission-information">
+                    <div class="information-row">
+                        <span>Mission ID</span>
+                        <strong>WF-001</strong>
+                    </div>
+
+                    <div class="information-row">
+                        <span>Assets</span>
+                        <strong>{{ assets | length }}</strong>
+                    </div>
+
+                    <div class="information-row">
+                        <span>Mode</span>
+                        <strong>Simulation</strong>
+                    </div>
+
+                    <div class="information-row">
+                        <span>AI Engine</span>
+                        <strong>Online</strong>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="panel map-panel">
+                <h2>Operational Map</h2>
+
+                <div class="map-placeholder">
+                    <div class="map-message">
+                        <strong>Live Operational Map</strong>
+                        Drone positions will appear here
+                    </div>
+                </div>
+            </section>
+
+            <aside class="panel">
+                <h2>Assets</h2>
+
+                {% for asset in assets %}
+                    <div class="asset">
+                        <div class="asset-name">
+                            <span>{{ asset.name }}</span>
+
+                            <span
+                                class="
+                                    {% if asset.battery <= 15 %}
+                                        battery-critical
+                                    {% elif asset.battery <= 30 %}
+                                        battery-warning
+                                    {% endif %}
+                                "
+                            >
+                                {{ asset.battery }}%
+                            </span>
+                        </div>
+
+                        <div class="asset-details">
+                            <span
+                                class="
+                                    {% if asset.status.value == 'warning' %}
+                                        status-warning
+                                    {% else %}
+                                        status-active
+                                    {% endif %}
+                                "
+                            >
+                                {{ asset.status.value | capitalize }}
+                            </span>
+
+                            {% if asset.telemetry %}
+                                · {{ asset.telemetry.altitude }} m
+                                · {{ asset.telemetry.speed }} m/s
+                                · {{ asset.telemetry.heading }}°
+                            {% else %}
+                                · No telemetry
+                            {% endif %}
+                        </div>
+
+                        {% if asset.telemetry %}
+                            <div class="asset-position">
+                                {{ asset.telemetry.latitude }},
+                                {{ asset.telemetry.longitude }}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </aside>
+        </section>
+    </main>
+</body>
+</html>

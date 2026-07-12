@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 from app.models.asset import Asset, AssetStatus, AssetType
 from app.services.simulator import get_simulated_assets
@@ -9,6 +11,8 @@ app = FastAPI(
     description="Multi-asset emergency intelligence platform",
     version="0.1.0",
 )
+
+templates = Jinja2Templates(directory="app/templates")
 
 
 @app.get("/")
@@ -26,6 +30,16 @@ def health() -> dict[str, str]:
         "status": "healthy",
     }
 
+
+@app.get("/command-center", response_class=HTMLResponse)
+def command_center(request: Request):
+    assets = get_simulated_assets()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="command_center.html",
+        context={"assets": assets},
+    )
 
 @app.get("/assets/demo", response_model=Asset)
 def get_demo_asset() -> Asset:
