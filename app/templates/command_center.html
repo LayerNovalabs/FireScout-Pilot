@@ -248,7 +248,64 @@
         .leaflet-control-attribution {
             font-size: 10px;
         }
+.recommendation-panel {
+    margin-top: 18px;
+    padding: 20px;
+    border: 1px solid #26364a;
+    border-radius: 12px;
+    background: #101d2e;
+}
 
+.recommendation-panel h2 {
+    margin: 0 0 16px;
+    font-size: 15px;
+    color: #9fb3c8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.recommendation-card {
+    padding: 18px;
+    border: 1px solid #854d0e;
+    border-left: 5px solid #f59e0b;
+    border-radius: 9px;
+    background: rgba(120, 53, 15, 0.2);
+}
+
+.recommendation-title {
+    margin-bottom: 8px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fcd34d;
+}
+
+.recommendation-action {
+    margin-bottom: 10px;
+    color: #e6edf3;
+}
+
+.recommendation-reason {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #9fb3c8;
+}
+
+.recommendation-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+.recommendation-priority {
+    color: #f87171;
+    font-weight: 700;
+}
+
+.recommendation-time {
+    color: #7dd3fc;
+    font-weight: 700;
+}
         @media (max-width: 1050px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -397,7 +454,37 @@
                     </div>
                 </div>
             </div>
-        </section>
+ <section class="recommendation-panel">
+    <h2>Decision Engine</h2>
+
+    <div id="recommendations-list">
+        <div class="recommendation-card">
+            <div class="recommendation-title">
+                Deploy response team
+            </div>
+
+            <div class="recommendation-action">
+                Dispatch the nearest ground response team
+                to the detected fire zone.
+            </div>
+
+            <div class="recommendation-reason">
+                A critical fire event was detected with
+                97% confidence.
+            </div>
+
+            <div class="recommendation-footer">
+                <span class="recommendation-priority">
+                    Priority: Critical
+                </span>
+
+                <span class="recommendation-time">
+                    Estimated response: 4 min
+                </span>
+            </div>
+        </div>
+    </div>
+</section>       </section>
     </main>
 
     <script

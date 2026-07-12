@@ -402,10 +402,95 @@ async function refreshEvents() {
         );
     }
 }
+function renderRecommendations(recommendations) {
+    const recommendationsList = document.getElementById(
+        "recommendations-list"
+    );
+
+    if (!recommendationsList) {
+        return;
+    }
+
+    recommendationsList.innerHTML = "";
+
+    if (recommendations.length === 0) {
+        recommendationsList.innerHTML = `
+            <div class="recommendation-reason">
+                No operational recommendations available.
+            </div>
+        `;
+
+        return;
+    }
+
+    recommendations.forEach((recommendation) => {
+        const recommendationElement =
+            document.createElement("div");
+
+        recommendationElement.className =
+            "recommendation-card";
+
+        recommendationElement.innerHTML = `
+            <div class="recommendation-title">
+                ${recommendation.title}
+            </div>
+
+            <div class="recommendation-action">
+                ${recommendation.action}
+            </div>
+
+            <div class="recommendation-reason">
+                ${recommendation.reason}
+            </div>
+
+            <div class="recommendation-footer">
+                <span class="recommendation-priority">
+                    Priority:
+                    ${capitalize(recommendation.priority)}
+                </span>
+
+                <span class="recommendation-time">
+                    Estimated response:
+                    ${recommendation.estimated_response_minutes} min
+                </span>
+            </div>
+        `;
+
+        recommendationsList.appendChild(
+            recommendationElement
+        );
+    });
+}
 
 
+async function refreshRecommendations() {
+    try {
+        const response = await fetch(
+            "/recommendations",
+            {
+                cache: "no-store",
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP error: ${response.status}`
+            );
+        }
+
+        const recommendations = await response.json();
+
+        renderRecommendations(recommendations);
+    } catch (error) {
+        console.error(
+            "Unable to update recommendations:",
+            error
+        );
+    }
+}
 refreshAssets();
 refreshEvents();
 
 setInterval(refreshAssets, 2000);
 setInterval(refreshEvents, 5000);
+setInterval(refreshRecommendations, 5000);
