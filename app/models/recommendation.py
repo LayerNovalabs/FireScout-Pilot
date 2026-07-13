@@ -18,3 +18,8 @@ class OperationalRecommendation(BaseModel):
     priority: RecommendationPriority
     related_event_id: str
     estimated_response_minutes: int
+
+    assigned_asset_name: str | None = None
+    priority_score: int | None = None
+    distance_km: float | None = None
+

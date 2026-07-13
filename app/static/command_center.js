@@ -402,6 +402,8 @@ async function refreshEvents() {
         );
     }
 }
+
+
 function renderRecommendations(recommendations) {
     const recommendationsList = document.getElementById(
         "recommendations-list"
@@ -430,6 +432,17 @@ function renderRecommendations(recommendations) {
         recommendationElement.className =
             "recommendation-card";
 
+        const assignedAsset =
+            recommendation.assigned_asset_name ?? "None";
+
+        const priorityScore =
+            recommendation.priority_score ?? "-";
+
+        const distance =
+            recommendation.distance_km != null
+                ? `${recommendation.distance_km.toFixed(2)} km`
+                : "-";
+
         recommendationElement.innerHTML = `
             <div class="recommendation-title">
                 ${recommendation.title}
@@ -443,15 +456,32 @@ function renderRecommendations(recommendations) {
                 ${recommendation.reason}
             </div>
 
+            <hr>
+
+            <div>
+                <strong>Assigned drone:</strong>
+                ${assignedAsset}
+            </div>
+
+            <div>
+                <strong>Priority score:</strong>
+                ${priorityScore} / 100
+            </div>
+
+            <div>
+                <strong>Distance:</strong>
+                ${distance}
+            </div>
+
+            <div>
+                <strong>Estimated response:</strong>
+                ${recommendation.estimated_response_minutes} min
+            </div>
+
             <div class="recommendation-footer">
                 <span class="recommendation-priority">
                     Priority:
                     ${capitalize(recommendation.priority)}
-                </span>
-
-                <span class="recommendation-time">
-                    Estimated response:
-                    ${recommendation.estimated_response_minutes} min
                 </span>
             </div>
         `;
@@ -488,8 +518,11 @@ async function refreshRecommendations() {
         );
     }
 }
+
+
 refreshAssets();
 refreshEvents();
+refreshRecommendations();
 
 setInterval(refreshAssets, 2000);
 setInterval(refreshEvents, 5000);
