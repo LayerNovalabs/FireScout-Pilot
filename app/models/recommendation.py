@@ -10,6 +10,12 @@ class RecommendationPriority(str, Enum):
     CRITICAL = "critical"
 
 
+class MissionStatus(str, Enum):
+    EN_ROUTE = "en_route"
+    AT_TARGET = "at_target"
+    PENDING = "pending"
+
+
 class OperationalRecommendation(BaseModel):
     id: str
     title: str
@@ -23,3 +29,4 @@ class OperationalRecommendation(BaseModel):
     priority_score: int | None = None
     distance_km: float | None = None
 
+    mission_status: MissionStatus

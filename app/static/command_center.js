@@ -25,6 +25,23 @@ function capitalize(value) {
 }
 
 
+function getMissionStatusLabel(status) {
+    if (status === "en_route") {
+        return "En route";
+    }
+
+    if (status === "at_target") {
+        return "At target";
+    }
+
+    if (status === "pending") {
+        return "Pending";
+    }
+
+    return "Unknown";
+}
+
+
 function getBatteryClass(battery) {
     if (battery <= 15) {
         return "battery-critical";
@@ -201,13 +218,18 @@ function updateEventMarker(operationalEvent) {
 
 
 function centerMapOnce() {
-    if (mapHasCentered || assetMarkers.size === 0) {
+    if (mapHasCentered) {
         return;
     }
 
-    const markers = Array.from(
-        assetMarkers.values()
-    );
+    const markers = [
+        ...assetMarkers.values(),
+        ...eventMarkers.values(),
+    ];
+
+    if (markers.length === 0) {
+        return;
+    }
 
     const markerGroup = L.featureGroup(markers);
 
@@ -215,7 +237,7 @@ function centerMapOnce() {
         markerGroup.getBounds(),
         {
             padding: [40, 40],
-            maxZoom: 15,
+            maxZoom: 13,
         }
     );
 
@@ -395,6 +417,7 @@ async function refreshEvents() {
         });
 
         renderEventAlerts(events);
+        centerMapOnce();
     } catch (error) {
         console.error(
             "Unable to update events:",
@@ -443,6 +466,23 @@ function renderRecommendations(recommendations) {
                 ? `${recommendation.distance_km.toFixed(2)} km`
                 : "-";
 
+        const missionStatus = getMissionStatusLabel(
+            recommendation.mission_status
+        );
+
+        let responseText;
+
+        if (recommendation.mission_status === "at_target") {
+            responseText = "Arrived";
+        } else if (
+            recommendation.mission_status === "pending"
+        ) {
+            responseText = "Pending";
+        } else {
+            responseText =
+                `${recommendation.estimated_response_minutes} min`;
+        }
+
         recommendationElement.innerHTML = `
             <div class="recommendation-title">
                 ${recommendation.title}
@@ -457,6 +497,11 @@ function renderRecommendations(recommendations) {
             </div>
 
             <hr>
+
+            <div>
+                <strong>Mission status:</strong>
+                ${missionStatus}
+            </div>
 
             <div>
                 <strong>Assigned drone:</strong>
@@ -475,7 +520,7 @@ function renderRecommendations(recommendations) {
 
             <div>
                 <strong>Estimated response:</strong>
-                ${recommendation.estimated_response_minutes} min
+                ${responseText}
             </div>
 
             <div class="recommendation-footer">

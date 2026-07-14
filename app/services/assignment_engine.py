@@ -111,6 +111,9 @@ class AssignmentEngine:
         distance_km: float,
         speed_mps: float,
     ) -> int:
+        if distance_km <= 0.05:
+            return 0
+
         if speed_mps <= 0:
             return 999
 
@@ -118,4 +121,4 @@ class AssignmentEngine:
         seconds = distance_meters / speed_mps
         minutes = seconds / 60
 
-        return max(1, round(minutes))
+        return max(1, round(minutes))   
