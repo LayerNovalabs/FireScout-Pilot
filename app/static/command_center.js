@@ -1,6 +1,6 @@
 const map = L.map("map").setView(
     [41.3874, 2.1686],
-    14
+    13
 );
 
 L.tileLayer(
@@ -21,6 +21,10 @@ let mapHasCentered = false;
 
 
 function capitalize(value) {
+    if (!value) {
+        return "";
+    }
+
     return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -38,11 +42,27 @@ function getMissionStatusLabel(status) {
         return "Pending";
     }
 
-    return "Unknown";
+    if (status === "searching") {
+        return "Searching";
+    }
+
+    if (status === "victim_located") {
+        return "Victim located";
+    }
+
+    if (status === "rescue_completed") {
+        return "Rescue completed";
+    }
+
+    return status ? capitalize(status) : "Unknown";
 }
 
 
 function getBatteryClass(battery) {
+    if (battery == null) {
+        return "";
+    }
+
     if (battery <= 15) {
         return "battery-critical";
     }
@@ -58,6 +78,10 @@ function getBatteryClass(battery) {
 function getAssetMarkerColor(asset) {
     if (asset.status === "warning") {
         return "#f59e0b";
+    }
+
+    if (asset.asset_type === "maritime_vehicle") {
+        return "#2dd4bf";
     }
 
     return "#38bdf8";
@@ -77,6 +101,26 @@ function getEventColor(operationalEvent) {
 }
 
 
+function getEventIcon(operationalEvent) {
+    if (operationalEvent.event_type === "victim") {
+        return "🛟";
+    }
+
+    if (
+        operationalEvent.event_type === "fire"
+        || operationalEvent.event_type === "smoke"
+    ) {
+        return "🔥";
+    }
+
+    if (operationalEvent.event_type === "gas") {
+        return "⚠️";
+    }
+
+    return "📍";
+}
+
+
 function updateAssetMarker(asset) {
     if (!asset.telemetry) {
         return;
@@ -90,10 +134,16 @@ function updateAssetMarker(asset) {
     const markerColor = getAssetMarkerColor(asset);
     let marker = assetMarkers.get(asset.id);
 
+    const batteryText =
+        asset.battery == null
+            ? "N/A"
+            : `${asset.battery}%`;
+
     const popupContent = `
         <strong>${asset.name}</strong><br>
+        Type: ${capitalize(asset.asset_type.replaceAll("_", " "))}<br>
         Status: ${capitalize(asset.status)}<br>
-        Battery: ${asset.battery}%<br>
+        Battery: ${batteryText}<br>
         Altitude: ${asset.telemetry.altitude} m<br>
         Speed: ${asset.telemetry.speed} m/s<br>
         Heading: ${asset.telemetry.heading}°
@@ -103,7 +153,10 @@ function updateAssetMarker(asset) {
         marker = L.circleMarker(
             position,
             {
-                radius: 9,
+                radius:
+                    asset.asset_type === "maritime_vehicle"
+                        ? 11
+                        : 9,
                 color: markerColor,
                 fillColor: markerColor,
                 fillOpacity: 0.9,
@@ -161,13 +214,22 @@ function updateEventMarker(operationalEvent) {
         operationalEvent
     );
 
+    const eventIcon = getEventIcon(
+        operationalEvent
+    );
+
     const confidence = Math.round(
         operationalEvent.confidence * 100
     );
 
     const popupContent = `
-        <strong>🔥 ${operationalEvent.title}</strong><br>
+        <strong>
+            ${eventIcon} ${operationalEvent.title}
+        </strong><br>
         ${operationalEvent.description}<br>
+        Type: ${capitalize(
+            operationalEvent.event_type.replaceAll("_", " ")
+        )}<br>
         Severity: ${capitalize(operationalEvent.severity)}<br>
         Confidence: ${confidence}%
     `;
@@ -178,7 +240,10 @@ function updateEventMarker(operationalEvent) {
         marker = L.circle(
             position,
             {
-                radius: 120,
+                radius:
+                    operationalEvent.event_type === "victim"
+                        ? 180
+                        : 120,
                 color: markerColor,
                 fillColor: markerColor,
                 fillOpacity: 0.3,
@@ -187,7 +252,7 @@ function updateEventMarker(operationalEvent) {
         ).addTo(map);
 
         marker.bindTooltip(
-            `🔥 ${operationalEvent.title}`,
+            `${eventIcon} ${operationalEvent.title}`,
             {
                 permanent: true,
                 direction: "top",
@@ -209,7 +274,7 @@ function updateEventMarker(operationalEvent) {
         });
 
         marker.setTooltipContent(
-            `🔥 ${operationalEvent.title}`
+            `${eventIcon} ${operationalEvent.title}`
         );
 
         marker.setPopupContent(popupContent);
@@ -222,22 +287,30 @@ function centerMapOnce() {
         return;
     }
 
+    /*
+     * Wait until both assets and operational events
+     * have been rendered so the map includes the full
+     * active scenario.
+     */
+    if (
+        assetMarkers.size === 0
+        || eventMarkers.size === 0
+    ) {
+        return;
+    }
+
     const markers = [
         ...assetMarkers.values(),
         ...eventMarkers.values(),
     ];
-
-    if (markers.length === 0) {
-        return;
-    }
 
     const markerGroup = L.featureGroup(markers);
 
     map.fitBounds(
         markerGroup.getBounds(),
         {
-            padding: [40, 40],
-            maxZoom: 13,
+            padding: [50, 50],
+            maxZoom: 14,
         }
     );
 
@@ -286,13 +359,19 @@ async function refreshAssets() {
                     ".asset-position"
                 );
 
-                nameElement.textContent = asset.name;
+                if (nameElement) {
+                    nameElement.textContent = asset.name;
+                }
 
-                batteryElement.textContent =
-                    `${asset.battery}%`;
+                if (batteryElement) {
+                    batteryElement.textContent =
+                        asset.battery == null
+                            ? "N/A"
+                            : `${asset.battery}%`;
 
-                batteryElement.className =
-                    getBatteryClass(asset.battery);
+                    batteryElement.className =
+                        getBatteryClass(asset.battery);
+                }
 
                 const statusClass =
                     asset.status === "warning"
@@ -300,27 +379,36 @@ async function refreshAssets() {
                         : "status-active";
 
                 if (asset.telemetry) {
-                    detailsElement.innerHTML = `
-                        <span class="${statusClass}">
-                            ${capitalize(asset.status)}
-                        </span>
-                        · ${asset.telemetry.altitude} m
-                        · ${asset.telemetry.speed} m/s
-                        · ${asset.telemetry.heading}°
-                    `;
+                    if (detailsElement) {
+                        detailsElement.innerHTML = `
+                            <span class="${statusClass}">
+                                ${capitalize(asset.status)}
+                            </span>
+                            · ${asset.telemetry.altitude} m
+                            · ${asset.telemetry.speed} m/s
+                            · ${asset.telemetry.heading}°
+                        `;
+                    }
 
-                    positionElement.textContent =
-                        `${asset.telemetry.latitude}, ` +
-                        `${asset.telemetry.longitude}`;
+                    if (positionElement) {
+                        positionElement.textContent =
+                            `${asset.telemetry.latitude}, `
+                            + `${asset.telemetry.longitude}`;
+                    }
                 } else {
-                    detailsElement.innerHTML = `
-                        <span class="${statusClass}">
-                            ${capitalize(asset.status)}
-                        </span>
-                        · No telemetry
-                    `;
+                    if (detailsElement) {
+                        detailsElement.innerHTML = `
+                            <span class="${statusClass}">
+                                ${capitalize(asset.status)}
+                            </span>
+                            · No telemetry
+                        `;
+                    }
 
-                    positionElement.textContent = "";
+                    if (positionElement) {
+                        positionElement.textContent =
+                            "No position available";
+                    }
                 }
             }
 
@@ -354,7 +442,7 @@ function renderEventAlerts(events) {
 
     if (activeEvents.length === 0) {
         eventsList.innerHTML = `
-            <div class="event-alert-description">
+            <div class="empty-state">
                 No active operational alerts.
             </div>
         `;
@@ -367,6 +455,10 @@ function renderEventAlerts(events) {
             operationalEvent.confidence * 100
         );
 
+        const eventIcon = getEventIcon(
+            operationalEvent
+        );
+
         const alertElement =
             document.createElement("div");
 
@@ -375,11 +467,15 @@ function renderEventAlerts(events) {
         alertElement.innerHTML = `
             <div>
                 <div class="event-alert-title">
-                    🔥 ${operationalEvent.title}
+                    ${eventIcon} ${operationalEvent.title}
                 </div>
 
                 <div class="event-alert-description">
                     ${operationalEvent.description}
+                    · Type:
+                    ${capitalize(
+                        operationalEvent.event_type.replaceAll("_", " ")
+                    )}
                     · Severity:
                     ${capitalize(operationalEvent.severity)}
                 </div>
@@ -440,7 +536,7 @@ function renderRecommendations(recommendations) {
 
     if (recommendations.length === 0) {
         recommendationsList.innerHTML = `
-            <div class="recommendation-reason">
+            <div class="empty-state">
                 No operational recommendations available.
             </div>
         `;
@@ -472,12 +568,21 @@ function renderRecommendations(recommendations) {
 
         let responseText;
 
-        if (recommendation.mission_status === "at_target") {
+        if (
+            recommendation.mission_status
+            === "at_target"
+        ) {
             responseText = "Arrived";
         } else if (
-            recommendation.mission_status === "pending"
+            recommendation.mission_status
+            === "pending"
         ) {
             responseText = "Pending";
+        } else if (
+            recommendation.mission_status
+            === "rescue_completed"
+        ) {
+            responseText = "Completed";
         } else {
             responseText =
                 `${recommendation.estimated_response_minutes} min`;
@@ -498,27 +603,27 @@ function renderRecommendations(recommendations) {
 
             <hr>
 
-            <div>
+            <div class="recommendation-card-detail">
                 <strong>Mission status:</strong>
                 ${missionStatus}
             </div>
 
-            <div>
-                <strong>Assigned drone:</strong>
+            <div class="recommendation-card-detail">
+                <strong>Assigned asset:</strong>
                 ${assignedAsset}
             </div>
 
-            <div>
+            <div class="recommendation-card-detail">
                 <strong>Priority score:</strong>
                 ${priorityScore} / 100
             </div>
 
-            <div>
+            <div class="recommendation-card-detail">
                 <strong>Distance:</strong>
                 ${distance}
             </div>
 
-            <div>
+            <div class="recommendation-card-detail">
                 <strong>Estimated response:</strong>
                 ${responseText}
             </div>
@@ -562,6 +667,57 @@ async function refreshRecommendations() {
             error
         );
     }
+}
+
+
+async function selectScenario(scenario) {
+    const scenarioSelector = document.getElementById(
+        "scenario-selector"
+    );
+
+    if (scenarioSelector) {
+        scenarioSelector.disabled = true;
+    }
+
+    try {
+        const response = await fetch(
+            `/scenario/${scenario}`,
+            {
+                method: "POST",
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP error: ${response.status}`
+            );
+        }
+
+        window.location.reload();
+    } catch (error) {
+        console.error(
+            "Unable to change scenario:",
+            error
+        );
+
+        if (scenarioSelector) {
+            scenarioSelector.disabled = false;
+        }
+    }
+}
+
+
+const scenarioSelector = document.getElementById(
+    "scenario-selector"
+);
+
+if (scenarioSelector) {
+    scenarioSelector.addEventListener(
+        "change",
+        (event) => {
+            selectScenario(event.target.value);
+        }
+    );
 }
 
 

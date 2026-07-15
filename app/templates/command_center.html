@@ -11,11 +11,9 @@
     <title>FireScout Command Center</title>
 
     <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-        crossorigin=""
-    >
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+>
 
     <style>
         * {
@@ -31,11 +29,12 @@
         }
 
         header {
-            height: 72px;
+            min-height: 72px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 28px;
+            gap: 24px;
+            padding: 12px 28px;
             border-bottom: 1px solid #26364a;
             background: #0d1828;
         }
@@ -48,6 +47,46 @@
 
         .brand span {
             color: #38bdf8;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .scenario-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .scenario-control label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #9fb3c8;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+
+        .scenario-control select {
+            min-width: 165px;
+            padding: 9px 34px 9px 12px;
+            border: 1px solid #3c5067;
+            border-radius: 7px;
+            color: #e6edf3;
+            background: #101d2e;
+            cursor: pointer;
+        }
+
+        .scenario-control select:focus {
+            outline: 2px solid #38bdf8;
+            outline-offset: 2px;
+        }
+
+        .scenario-control select:disabled {
+            cursor: wait;
+            opacity: 0.7;
         }
 
         .system-status {
@@ -127,6 +166,7 @@
         .information-row {
             display: flex;
             justify-content: space-between;
+            gap: 16px;
             margin-bottom: 14px;
             color: #8ea3b9;
             font-size: 14px;
@@ -198,7 +238,8 @@
             color: #fbbf24;
         }
 
-        .alerts-panel {
+        .alerts-panel,
+        .recommendation-panel {
             margin-top: 18px;
             padding: 20px;
             border: 1px solid #26364a;
@@ -206,7 +247,8 @@
             background: #101d2e;
         }
 
-        .alerts-panel h2 {
+        .alerts-panel h2,
+        .recommendation-panel h2 {
             margin: 0 0 16px;
             font-size: 15px;
             color: #9fb3c8;
@@ -226,6 +268,10 @@
             background: rgba(127, 29, 29, 0.22);
         }
 
+        .event-alert + .event-alert {
+            margin-top: 12px;
+        }
+
         .event-alert-title {
             margin-bottom: 5px;
             font-weight: 700;
@@ -234,6 +280,7 @@
 
         .event-alert-description {
             font-size: 14px;
+            line-height: 1.5;
             color: #c7d2df;
         }
 
@@ -245,74 +292,110 @@
             color: #f87171;
         }
 
+        .recommendation-card {
+            padding: 18px;
+            border: 1px solid #854d0e;
+            border-left: 5px solid #f59e0b;
+            border-radius: 9px;
+            background: rgba(120, 53, 15, 0.2);
+        }
+
+        .recommendation-card + .recommendation-card {
+            margin-top: 14px;
+        }
+
+        .recommendation-title {
+            margin-bottom: 8px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #fcd34d;
+        }
+
+        .recommendation-action {
+            margin-bottom: 10px;
+            color: #e6edf3;
+        }
+
+        .recommendation-reason {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #9fb3c8;
+        }
+
+        .recommendation-card hr {
+            margin: 16px 0;
+            border: 0;
+            border-top: 1px solid #3c5067;
+        }
+
+        .recommendation-card-detail {
+            margin-top: 7px;
+            color: #c7d2df;
+            font-size: 14px;
+        }
+
+        .recommendation-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 16px;
+            font-size: 14px;
+        }
+
+        .recommendation-priority {
+            color: #f87171;
+            font-weight: 700;
+        }
+
+        .recommendation-time {
+            color: #7dd3fc;
+            font-weight: 700;
+        }
+
+        .empty-state {
+            padding: 14px;
+            color: #9fb3c8;
+            border: 1px dashed #3c5067;
+            border-radius: 8px;
+        }
+
         .leaflet-control-attribution {
             font-size: 10px;
         }
-.recommendation-panel {
-    margin-top: 18px;
-    padding: 20px;
-    border: 1px solid #26364a;
-    border-radius: 12px;
-    background: #101d2e;
-}
 
-.recommendation-panel h2 {
-    margin: 0 0 16px;
-    font-size: 15px;
-    color: #9fb3c8;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.recommendation-card {
-    padding: 18px;
-    border: 1px solid #854d0e;
-    border-left: 5px solid #f59e0b;
-    border-radius: 9px;
-    background: rgba(120, 53, 15, 0.2);
-}
-
-.recommendation-title {
-    margin-bottom: 8px;
-    font-size: 18px;
-    font-weight: 700;
-    color: #fcd34d;
-}
-
-.recommendation-action {
-    margin-bottom: 10px;
-    color: #e6edf3;
-}
-
-.recommendation-reason {
-    font-size: 14px;
-    line-height: 1.5;
-    color: #9fb3c8;
-}
-
-.recommendation-footer {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 16px;
-    font-size: 14px;
-}
-
-.recommendation-priority {
-    color: #f87171;
-    font-weight: 700;
-}
-
-.recommendation-time {
-    color: #7dd3fc;
-    font-weight: 700;
-}
         @media (max-width: 1050px) {
+            header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .header-controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+
             .dashboard-grid {
                 grid-template-columns: 1fr;
             }
 
             #map {
                 min-height: 420px;
+            }
+        }
+
+        @media (max-width: 620px) {
+            .header-controls,
+            .scenario-control {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .scenario-control select {
+                width: 100%;
+            }
+
+            .system-status {
+                margin-top: 4px;
             }
         }
     </style>
@@ -324,9 +407,37 @@
             Fire<span>Scout</span>
         </div>
 
-        <div class="system-status">
-            <span class="status-dot"></span>
-            System Online
+        <div class="header-controls">
+            <div class="scenario-control">
+                <label for="scenario-selector">
+                    Scenario
+                </label>
+
+                <select id="scenario-selector">
+                    <option
+                        value="wildfire"
+                        {% if active_scenario == "wildfire" %}
+                            selected
+                        {% endif %}
+                    >
+                        Wildfire
+                    </option>
+
+                    <option
+                        value="maritime_sar"
+                        {% if active_scenario == "maritime_sar" %}
+                            selected
+                        {% endif %}
+                    >
+                        Maritime SAR
+                    </option>
+                </select>
+            </div>
+
+            <div class="system-status">
+                <span class="status-dot"></span>
+                System Online
+            </div>
         </div>
     </header>
 
@@ -344,7 +455,11 @@
                 <h2>Mission</h2>
 
                 <div class="mission-name">
-                    Wildfire
+                    {% if active_scenario == "maritime_sar" %}
+                        Maritime SAR
+                    {% else %}
+                        Wildfire
+                    {% endif %}
                 </div>
 
                 <div class="mission-state">
@@ -354,7 +469,14 @@
                 <div class="mission-information">
                     <div class="information-row">
                         <span>Mission ID</span>
-                        <strong>WF-001</strong>
+
+                        <strong>
+                            {% if active_scenario == "maritime_sar" %}
+                                SAR-001
+                            {% else %}
+                                WF-001
+                            {% endif %}
+                        </strong>
                     </div>
 
                     <div class="information-row">
@@ -390,14 +512,20 @@
 
                             <span
                                 class="
-                                    {% if asset.battery <= 15 %}
-                                        battery-critical
-                                    {% elif asset.battery <= 30 %}
-                                        battery-warning
+                                    {% if asset.battery is not none %}
+                                        {% if asset.battery <= 15 %}
+                                            battery-critical
+                                        {% elif asset.battery <= 30 %}
+                                            battery-warning
+                                        {% endif %}
                                     {% endif %}
                                 "
                             >
-                                {{ asset.battery }}%
+                                {% if asset.battery is not none %}
+                                    {{ asset.battery }}%
+                                {% else %}
+                                    N/A
+                                {% endif %}
                             </span>
                         </div>
 
@@ -423,12 +551,18 @@
                             {% endif %}
                         </div>
 
-                        {% if asset.telemetry %}
-                            <div class="asset-position">
+                        <div class="asset-position">
+                            {% if asset.telemetry %}
                                 {{ asset.telemetry.latitude }},
                                 {{ asset.telemetry.longitude }}
-                            </div>
-                        {% endif %}
+                            {% else %}
+                                No position available
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        No assets available.
                     </div>
                 {% endfor %}
             </aside>
@@ -438,61 +572,26 @@
             <h2>Operational Alerts</h2>
 
             <div id="events-list">
-                <div class="event-alert">
-                    <div>
-                        <div class="event-alert-title">
-                            🔥 Active fire detected
-                        </div>
-
-                        <div class="event-alert-description">
-                            Loading live operational event data...
-                        </div>
-                    </div>
-
-                    <div class="event-alert-confidence">
-                        97%
-                    </div>
+                <div class="empty-state">
+                    Loading operational alert data...
                 </div>
             </div>
- <section class="recommendation-panel">
-    <h2>Decision Engine</h2>
+        </section>
 
-    <div id="recommendations-list">
-        <div class="recommendation-card">
-            <div class="recommendation-title">
-                Deploy response team
+        <section class="recommendation-panel">
+            <h2>Decision Engine</h2>
+
+            <div id="recommendations-list">
+                <div class="empty-state">
+                    Loading operational recommendations...
+                </div>
             </div>
-
-            <div class="recommendation-action">
-                Dispatch the nearest ground response team
-                to the detected fire zone.
-            </div>
-
-            <div class="recommendation-reason">
-                A critical fire event was detected with
-                97% confidence.
-            </div>
-
-            <div class="recommendation-footer">
-                <span class="recommendation-priority">
-                    Priority: Critical
-                </span>
-
-                <span class="recommendation-time">
-                    Estimated response: 4 min
-                </span>
-            </div>
-        </div>
-    </div>
-</section>       </section>
+        </section>
     </main>
 
-    <script
-        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""
-    ></script>
+   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
- <script src="/static/command_center.js?v=4"></script>    
+<script src="/static/command_center.js?v=7"></script>
+    <script src="/static/command_center.js?v=6"></script>
 </body>
 </html>

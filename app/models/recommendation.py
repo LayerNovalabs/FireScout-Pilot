@@ -15,6 +15,10 @@ class MissionStatus(str, Enum):
     AT_TARGET = "at_target"
     PENDING = "pending"
 
+    SEARCHING = "searching"
+    VICTIM_LOCATED = "victim_located"
+    RESCUE_COMPLETED = "rescue_completed"
+
 
 class OperationalRecommendation(BaseModel):
     id: str
@@ -28,5 +32,4 @@ class OperationalRecommendation(BaseModel):
     assigned_asset_name: str | None = None
     priority_score: int | None = None
     distance_km: float | None = None
-
     mission_status: MissionStatus
