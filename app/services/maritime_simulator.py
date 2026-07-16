@@ -3,7 +3,8 @@ import time
 
 from app.models.asset import Asset, AssetStatus, AssetType
 from app.models.telemetry import Telemetry
-from app.services.maritime_events import get_maritime_events
+from app.services.scenario_manager import ScenarioType
+from app.services.search_area_engine import SearchAreaEngine
 
 
 SIMULATION_TIME_SCALE = 8.0
@@ -21,12 +22,27 @@ _MISSION_START_TIME: float | None = None
 
 
 def reset_maritime_simulation() -> None:
+    """
+    Reinicia el reloj de la simulación marítima.
+    """
+
     global _MISSION_START_TIME
 
     _MISSION_START_TIME = time.monotonic()
 
 
 def get_maritime_assets() -> list[Asset]:
+    """
+    Devuelve el dron SAR y la embarcación de rescate.
+
+    Ambos activos se desplazan hacia el centro calculado
+    de la zona de búsqueda marítima.
+
+    Llegar a ese centro no significa que la víctima haya
+    sido localizada. Solo significa que el activo está
+    posicionado en la zona de búsqueda.
+    """
+
     global _MISSION_START_TIME
 
     if _MISSION_START_TIME is None:
@@ -45,25 +61,35 @@ def get_maritime_assets() -> list[Asset]:
         real_elapsed_seconds * SIMULATION_TIME_SCALE
     )
 
-    events = get_maritime_events()
+    search_areas = SearchAreaEngine().get_search_areas(
+        ScenarioType.MARITIME_SAR
+    )
 
-    if not events:
+    if not search_areas:
         return []
 
-    target_event = events[0]
+    target_area = search_areas[0]
+
+    target_latitude = (
+        target_area.estimated_center.latitude
+    )
+
+    target_longitude = (
+        target_area.estimated_center.longitude
+    )
 
     drone = _create_sar_drone(
         elapsed_seconds=simulated_elapsed_seconds,
         real_elapsed_seconds=real_elapsed_seconds,
-        target_latitude=target_event.latitude,
-        target_longitude=target_event.longitude,
+        target_latitude=target_latitude,
+        target_longitude=target_longitude,
     )
 
     boat = _create_rescue_boat(
         elapsed_seconds=simulated_elapsed_seconds,
         real_elapsed_seconds=real_elapsed_seconds,
-        target_latitude=target_event.latitude,
-        target_longitude=target_event.longitude,
+        target_latitude=target_latitude,
+        target_longitude=target_longitude,
     )
 
     return [
@@ -78,6 +104,10 @@ def _create_sar_drone(
     target_latitude: float,
     target_longitude: float,
 ) -> Asset:
+    """
+    Crea el estado actual del dron SAR.
+    """
+
     (
         latitude,
         longitude,
@@ -100,13 +130,20 @@ def _create_sar_drone(
         status=AssetStatus.ACTIVE,
         battery=max(
             0,
-            int(94 - real_elapsed_seconds / 180),
+            int(
+                94
+                - real_elapsed_seconds / 180
+            ),
         ),
         telemetry=Telemetry(
             latitude=latitude,
             longitude=longitude,
             altitude=70.0 if arrived else 85.0,
-            speed=0.0 if arrived else _DRONE_SPEED_MPS,
+            speed=(
+                0.0
+                if arrived
+                else _DRONE_SPEED_MPS
+            ),
             heading=heading,
         ),
     )
@@ -118,6 +155,10 @@ def _create_rescue_boat(
     target_latitude: float,
     target_longitude: float,
 ) -> Asset:
+    """
+    Crea el estado actual de la embarcación.
+    """
+
     (
         latitude,
         longitude,
@@ -144,13 +185,20 @@ def _create_rescue_boat(
         ),
         battery=max(
             0,
-            int(88 - real_elapsed_seconds / 300),
+            int(
+                88
+                - real_elapsed_seconds / 300
+            ),
         ),
         telemetry=Telemetry(
             latitude=latitude,
             longitude=longitude,
             altitude=0.0,
-            speed=0.0 if arrived else _BOAT_SPEED_MPS,
+            speed=(
+                0.0
+                if arrived
+                else _BOAT_SPEED_MPS
+            ),
             heading=heading,
         ),
     )
@@ -165,6 +213,11 @@ def _move_towards_target(
     elapsed_seconds: float,
     arrival_radius_meters: float,
 ) -> tuple[float, float, float, bool]:
+    """
+    Calcula la posición actual de un activo que se
+    desplaza en línea recta hacia un objetivo.
+    """
+
     total_distance_meters = _calculate_distance_meters(
         latitude_1=start_latitude,
         longitude_1=start_longitude,
@@ -192,12 +245,16 @@ def _move_towards_target(
         total_distance_meters,
     )
 
-    progress = travelled_meters / total_distance_meters
+    progress = (
+        travelled_meters
+        / total_distance_meters
+    )
 
     latitude = (
         start_latitude
         + (
-            target_latitude - start_latitude
+            target_latitude
+            - start_latitude
         )
         * progress
     )
@@ -205,13 +262,15 @@ def _move_towards_target(
     longitude = (
         start_longitude
         + (
-            target_longitude - start_longitude
+            target_longitude
+            - start_longitude
         )
         * progress
     )
 
     remaining_distance_meters = (
-        total_distance_meters - travelled_meters
+        total_distance_meters
+        - travelled_meters
     )
 
     arrived = (
@@ -237,10 +296,20 @@ def _calculate_distance_meters(
     latitude_2: float,
     longitude_2: float,
 ) -> float:
+    """
+    Calcula la distancia entre dos coordenadas mediante
+    la fórmula de Haversine.
+    """
+
     earth_radius_meters = 6_371_000.0
 
-    latitude_1_radians = math.radians(latitude_1)
-    latitude_2_radians = math.radians(latitude_2)
+    latitude_1_radians = math.radians(
+        latitude_1
+    )
+
+    latitude_2_radians = math.radians(
+        latitude_2
+    )
 
     latitude_delta = math.radians(
         latitude_2 - latitude_1
@@ -251,18 +320,27 @@ def _calculate_distance_meters(
     )
 
     haversine_value = (
-        math.sin(latitude_delta / 2) ** 2
+        math.sin(
+            latitude_delta / 2
+        ) ** 2
         + math.cos(latitude_1_radians)
         * math.cos(latitude_2_radians)
-        * math.sin(longitude_delta / 2) ** 2
+        * math.sin(
+            longitude_delta / 2
+        ) ** 2
     )
 
     angular_distance = 2 * math.atan2(
         math.sqrt(haversine_value),
-        math.sqrt(1 - haversine_value),
+        math.sqrt(
+            1 - haversine_value
+        ),
     )
 
-    return earth_radius_meters * angular_distance
+    return (
+        earth_radius_meters
+        * angular_distance
+    )
 
 
 def _calculate_heading(
@@ -271,15 +349,25 @@ def _calculate_heading(
     latitude_2: float,
     longitude_2: float,
 ) -> float:
-    latitude_1_radians = math.radians(latitude_1)
-    latitude_2_radians = math.radians(latitude_2)
+    """
+    Calcula el rumbo desde una posición hasta otra.
+    """
+
+    latitude_1_radians = math.radians(
+        latitude_1
+    )
+
+    latitude_2_radians = math.radians(
+        latitude_2
+    )
 
     longitude_delta = math.radians(
         longitude_2 - longitude_1
     )
 
-    x_value = math.sin(longitude_delta) * math.cos(
-        latitude_2_radians
+    x_value = (
+        math.sin(longitude_delta)
+        * math.cos(latitude_2_radians)
     )
 
     y_value = (
@@ -291,7 +379,12 @@ def _calculate_heading(
     )
 
     heading = math.degrees(
-        math.atan2(x_value, y_value)
+        math.atan2(
+            x_value,
+            y_value,
+        )
     )
 
-    return (heading + 360) % 360
+    return (
+        heading + 360
+    ) % 360

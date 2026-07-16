@@ -11,9 +11,9 @@
     <title>FireScout Command Center</title>
 
     <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
->
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
 
     <style>
         * {
@@ -239,7 +239,8 @@
         }
 
         .alerts-panel,
-        .recommendation-panel {
+        .recommendation-panel,
+        .search-intelligence-panel {
             margin-top: 18px;
             padding: 20px;
             border: 1px solid #26364a;
@@ -248,7 +249,8 @@
         }
 
         .alerts-panel h2,
-        .recommendation-panel h2 {
+        .recommendation-panel h2,
+        .search-intelligence-panel h2 {
             margin: 0 0 16px;
             font-size: 15px;
             color: #9fb3c8;
@@ -352,6 +354,53 @@
             font-weight: 700;
         }
 
+        .search-intelligence-grid {
+            display: grid;
+            grid-template-columns:
+                minmax(280px, 0.8fr)
+                minmax(320px, 1.2fr);
+            gap: 16px;
+        }
+
+        .environment-card,
+        .search-area-card {
+            padding: 16px;
+            border: 1px solid #293d54;
+            border-radius: 9px;
+            background: #0b1726;
+        }
+
+        .search-area-card + .search-area-card {
+            margin-top: 12px;
+        }
+
+        .intelligence-title {
+            margin-bottom: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #7dd3fc;
+        }
+
+        .intelligence-detail {
+            margin-top: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #9fb3c8;
+        }
+
+        .intelligence-detail strong {
+            color: #e6edf3;
+        }
+
+        .intelligence-summary {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid #293d54;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #7f95ab;
+        }
+
         .empty-state {
             padding: 14px;
             color: #9fb3c8;
@@ -375,6 +424,10 @@
             }
 
             .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .search-intelligence-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -568,6 +621,24 @@
             </aside>
         </section>
 
+        <section class="search-intelligence-panel">
+            <h2>Search Intelligence</h2>
+
+            <div class="search-intelligence-grid">
+                <div id="environment-summary">
+                    <div class="empty-state">
+                        Loading environmental conditions...
+                    </div>
+                </div>
+
+                <div id="search-area-list">
+                    <div class="empty-state">
+                        Calculating probable search area...
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="alerts-panel">
             <h2>Operational Alerts</h2>
 
@@ -589,9 +660,12 @@
         </section>
     </main>
 
-   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    ></script>
 
-<script src="/static/command_center.js?v=7"></script>
-    <script src="/static/command_center.js?v=6"></script>
+    <script src="/static/command_center.js?v=8"></script>
+
+    <script src="/static/search_intelligence.js?v=1"></script>
 </body>
 </html>
