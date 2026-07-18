@@ -1,8 +1,19 @@
 import math
 import time
 
-from app.models.asset import Asset, AssetStatus, AssetType
+from app.models.asset import (
+    Asset,
+    AssetStatus,
+    AssetType,
+)
+from app.models.mission_plan import MissionPlanStatus
 from app.models.telemetry import Telemetry
+from app.services.mission_execution_engine import (
+    MissionExecutionSnapshot,
+)
+from app.services.mission_runtime import (
+    get_primary_execution_snapshot,
+)
 from app.services.scenario_manager import ScenarioType
 from app.services.search_area_engine import SearchAreaEngine
 
@@ -15,7 +26,6 @@ _DRONE_START_LONGITUDE = 2.2250
 _BOAT_START_LATITUDE = 41.3510
 _BOAT_START_LONGITUDE = 2.2150
 
-_DRONE_SPEED_MPS = 16.0
 _BOAT_SPEED_MPS = 8.0
 
 _MISSION_START_TIME: float | None = None
@@ -23,7 +33,8 @@ _MISSION_START_TIME: float | None = None
 
 def reset_maritime_simulation() -> None:
     """
-    Reinicia el reloj de la simulación marítima.
+    Reinicia el reloj utilizado por la embarcación
+    y por el consumo de batería de los activos.
     """
 
     global _MISSION_START_TIME
@@ -33,14 +44,17 @@ def reset_maritime_simulation() -> None:
 
 def get_maritime_assets() -> list[Asset]:
     """
-    Devuelve el dron SAR y la embarcación de rescate.
+    Devuelve los activos del escenario Maritime SAR.
 
-    Ambos activos se desplazan hacia el centro calculado
-    de la zona de búsqueda marítima.
+    El dron SAR utiliza exactamente el mismo estado
+    dinámico que el Mission Planner:
 
-    Llegar a ese centro no significa que la víctima haya
-    sido localizada. Solo significa que el activo está
-    posicionado en la zona de búsqueda.
+    - durante el tránsito se dirige al primer waypoint;
+    - durante la búsqueda recorre las líneas paralelas;
+    - el marcador y el porcentaje quedan sincronizados.
+
+    La embarcación continúa navegando hacia el centro
+    estimado de la zona de búsqueda para quedar preparada.
     """
 
     global _MISSION_START_TIME
@@ -58,7 +72,8 @@ def get_maritime_assets() -> list[Asset]:
     )
 
     simulated_elapsed_seconds = (
-        real_elapsed_seconds * SIMULATION_TIME_SCALE
+        real_elapsed_seconds
+        * SIMULATION_TIME_SCALE
     )
 
     search_areas = SearchAreaEngine().get_search_areas(
@@ -78,11 +93,15 @@ def get_maritime_assets() -> list[Asset]:
         target_area.estimated_center.longitude
     )
 
+    execution_snapshot = (
+        get_primary_execution_snapshot(
+            ScenarioType.MARITIME_SAR
+        )
+    )
+
     drone = _create_sar_drone(
-        elapsed_seconds=simulated_elapsed_seconds,
+        snapshot=execution_snapshot,
         real_elapsed_seconds=real_elapsed_seconds,
-        target_latitude=target_latitude,
-        target_longitude=target_longitude,
     )
 
     boat = _create_rescue_boat(
@@ -99,52 +118,67 @@ def get_maritime_assets() -> list[Asset]:
 
 
 def _create_sar_drone(
-    elapsed_seconds: float,
+    snapshot: MissionExecutionSnapshot | None,
     real_elapsed_seconds: float,
-    target_latitude: float,
-    target_longitude: float,
 ) -> Asset:
     """
-    Crea el estado actual del dron SAR.
+    Crea el dron SAR utilizando el estado dinámico
+    del Mission Execution Engine.
     """
 
-    (
-        latitude,
-        longitude,
-        heading,
-        arrived,
-    ) = _move_towards_target(
-        start_latitude=_DRONE_START_LATITUDE,
-        start_longitude=_DRONE_START_LONGITUDE,
-        target_latitude=target_latitude,
-        target_longitude=target_longitude,
-        speed_mps=_DRONE_SPEED_MPS,
-        elapsed_seconds=elapsed_seconds,
-        arrival_radius_meters=20.0,
+    if snapshot is None:
+        return Asset(
+            id="sar-drone-001",
+            name="SAR Drone One",
+            asset_type=AssetType.AERIAL_DRONE,
+            status=AssetStatus.READY,
+            battery=94,
+            telemetry=Telemetry(
+                latitude=_DRONE_START_LATITUDE,
+                longitude=_DRONE_START_LONGITUDE,
+                altitude=0.0,
+                speed=0.0,
+                heading=0.0,
+            ),
+        )
+
+    if (
+        snapshot.plan.status
+        == MissionPlanStatus.COMPLETED
+    ):
+        status = AssetStatus.READY
+    else:
+        status = AssetStatus.ACTIVE
+
+    battery = max(
+        0,
+        int(
+            94
+            - real_elapsed_seconds / 180
+        ),
     )
 
     return Asset(
         id="sar-drone-001",
         name="SAR Drone One",
         asset_type=AssetType.AERIAL_DRONE,
-        status=AssetStatus.ACTIVE,
-        battery=max(
-            0,
-            int(
-                94
-                - real_elapsed_seconds / 180
-            ),
-        ),
+        status=status,
+        battery=battery,
         telemetry=Telemetry(
-            latitude=latitude,
-            longitude=longitude,
-            altitude=70.0 if arrived else 85.0,
-            speed=(
-                0.0
-                if arrived
-                else _DRONE_SPEED_MPS
+            latitude=snapshot.position.latitude,
+            longitude=snapshot.position.longitude,
+            altitude=round(
+                snapshot.altitude_m,
+                1,
             ),
-            heading=heading,
+            speed=round(
+                snapshot.speed_mps,
+                1,
+            ),
+            heading=round(
+                snapshot.heading_degrees,
+                1,
+            ),
         ),
     )
 
@@ -156,7 +190,11 @@ def _create_rescue_boat(
     target_longitude: float,
 ) -> Asset:
     """
-    Crea el estado actual de la embarcación.
+    Crea la embarcación de rescate.
+
+    La embarcación se dirige al centro probable de
+    la zona y queda preparada para actuar cuando
+    el dron localice a la víctima.
     """
 
     (
@@ -179,9 +217,9 @@ def _create_rescue_boat(
         name="Rescue Boat One",
         asset_type=AssetType.MARITIME_VEHICLE,
         status=(
-            AssetStatus.ACTIVE
-            if not arrived
-            else AssetStatus.READY
+            AssetStatus.READY
+            if arrived
+            else AssetStatus.ACTIVE
         ),
         battery=max(
             0,
@@ -214,8 +252,8 @@ def _move_towards_target(
     arrival_radius_meters: float,
 ) -> tuple[float, float, float, bool]:
     """
-    Calcula la posición actual de un activo que se
-    desplaza en línea recta hacia un objetivo.
+    Calcula la posición de un activo que se desplaza
+    en línea recta hacia un objetivo.
     """
 
     total_distance_meters = _calculate_distance_meters(
@@ -365,12 +403,12 @@ def _calculate_heading(
         longitude_2 - longitude_1
     )
 
-    x_value = (
+    east_component = (
         math.sin(longitude_delta)
         * math.cos(latitude_2_radians)
     )
 
-    y_value = (
+    north_component = (
         math.cos(latitude_1_radians)
         * math.sin(latitude_2_radians)
         - math.sin(latitude_1_radians)
@@ -380,11 +418,11 @@ def _calculate_heading(
 
     heading = math.degrees(
         math.atan2(
-            x_value,
-            y_value,
+            east_component,
+            north_component,
         )
     )
 
     return (
-        heading + 360
-    ) % 360
+        heading + 360.0
+    ) % 360.0

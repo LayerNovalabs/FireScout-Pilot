@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from app.models.asset import Asset, AssetStatus, AssetType
 from app.models.environment import EnvironmentalConditions
 from app.models.event import OperationalEvent
+from app.models.mission_plan import SearchMissionPlan
 from app.models.recommendation import OperationalRecommendation
 from app.models.search_area import SearchArea
 
@@ -25,6 +26,10 @@ from app.services.maritime_simulator import (
     get_maritime_assets,
     reset_maritime_simulation,
 )
+from app.services.mission_runtime import (
+    get_active_executed_mission_plans,
+    reset_mission_execution,
+)
 from app.services.scenario_manager import (
     ScenarioType,
     get_active_scenario,
@@ -43,7 +48,9 @@ from app.services.wildfire_events import (
 
 app = FastAPI(
     title="FireScout Platform",
-    description="Multi-asset emergency intelligence platform",
+    description=(
+        "Multi-asset emergency intelligence platform"
+    ),
     version="0.1.0",
 )
 
@@ -105,16 +112,26 @@ def _get_active_recommendations(
 
 @app.get("/")
 def home() -> dict[str, str]:
+    """
+    Información básica de la plataforma.
+    """
+
     return {
         "name": "FireScout Platform",
         "status": "running",
         "version": "0.1.0",
-        "active_scenario": get_active_scenario().value,
+        "active_scenario": (
+            get_active_scenario().value
+        ),
     }
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """
+    Estado de salud del backend.
+    """
+
     return {
         "status": "healthy",
     }
@@ -122,6 +139,11 @@ def health() -> dict[str, str]:
 
 @app.get("/scenarios")
 def get_scenarios() -> dict[str, object]:
+    """
+    Devuelve los escenarios disponibles
+    y el escenario activo.
+    """
+
     return {
         "active": get_active_scenario().value,
         "available": [
@@ -133,6 +155,10 @@ def get_scenarios() -> dict[str, object]:
 
 @app.get("/scenario")
 def get_scenario() -> dict[str, str]:
+    """
+    Devuelve el escenario actualmente seleccionado.
+    """
+
     return {
         "active": get_active_scenario().value,
     }
@@ -142,8 +168,17 @@ def get_scenario() -> dict[str, str]:
 def select_scenario(
     scenario: ScenarioType,
 ) -> dict[str, str]:
+    """
+    Cambia el escenario activo y reinicia
+    sus simulaciones y planes de misión.
+    """
+
     selected_scenario = set_active_scenario(
         scenario
+    )
+
+    reset_mission_execution(
+        selected_scenario
     )
 
     if selected_scenario == ScenarioType.MARITIME_SAR:
@@ -162,6 +197,10 @@ def select_scenario(
 def command_center(
     request: Request,
 ):
+    """
+    Muestra el Command Center.
+    """
+
     assets = _get_active_assets()
 
     return templates.TemplateResponse(
@@ -181,6 +220,10 @@ def command_center(
     response_model=Asset,
 )
 def get_demo_asset() -> Asset:
+    """
+    Devuelve un activo de demostración.
+    """
+
     return Asset(
         id="sim-001",
         name="Simulator Alpha",
@@ -195,6 +238,10 @@ def get_demo_asset() -> Asset:
     response_model=list[Asset],
 )
 def get_assets() -> list[Asset]:
+    """
+    Devuelve los activos del escenario activo.
+    """
+
     return _get_active_assets()
 
 
@@ -203,6 +250,10 @@ def get_assets() -> list[Asset]:
     response_model=list[OperationalEvent],
 )
 def get_events() -> list[OperationalEvent]:
+    """
+    Devuelve los eventos del escenario activo.
+    """
+
     return _get_active_events()
 
 
@@ -212,6 +263,10 @@ def get_events() -> list[OperationalEvent]:
 )
 def get_recommendations(
 ) -> list[OperationalRecommendation]:
+    """
+    Devuelve las recomendaciones del Decision Engine.
+    """
+
     return _get_active_recommendations()
 
 
@@ -235,7 +290,7 @@ def get_environment() -> EnvironmentalConditions:
 def get_search_areas() -> list[SearchArea]:
     """
     Devuelve todas las zonas de búsqueda calculadas
-    para los eventos activos del escenario actual.
+    para el escenario activo.
     """
 
     return get_active_search_areas()
@@ -256,3 +311,56 @@ def get_primary_search_area() -> SearchArea | None:
         return None
 
     return search_areas[0]
+
+
+@app.get(
+    "/mission-plans",
+    response_model=list[SearchMissionPlan],
+)
+def get_mission_plans() -> list[SearchMissionPlan]:
+    """
+    Devuelve los planes de búsqueda con progreso dinámico.
+    """
+
+    return get_active_executed_mission_plans()
+
+
+@app.get(
+    "/mission-plan",
+    response_model=SearchMissionPlan | None,
+)
+def get_primary_mission_plan(
+) -> SearchMissionPlan | None:
+    """
+    Devuelve el plan principal con progreso dinámico.
+    """
+
+    mission_plans = (
+        get_active_executed_mission_plans()
+    )
+
+    if not mission_plans:
+        return None
+
+    return mission_plans[0]
+
+
+@app.post("/mission/reset")
+def reset_active_mission() -> dict[str, str]:
+    """
+    Reinicia manualmente el progreso de la misión activa.
+    """
+
+    scenario = get_active_scenario()
+
+    reset_mission_execution(
+        scenario
+    )
+
+    if scenario == ScenarioType.MARITIME_SAR:
+        reset_maritime_simulation()
+
+    return {
+        "status": "reset",
+        "scenario": scenario.value,
+    }
