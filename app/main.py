@@ -3,13 +3,26 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.models.asset import Asset, AssetStatus, AssetType
-from app.models.environment import EnvironmentalConditions
+from app.models.asset import (
+    Asset,
+    AssetStatus,
+    AssetType,
+)
+from app.models.detection import (
+    SensorDetection,
+    SensorMissionStatus,
+)
+from app.models.environment import (
+    EnvironmentalConditions,
+)
 from app.models.event import OperationalEvent
-from app.models.mission_plan import SearchMissionPlan
-from app.models.recommendation import OperationalRecommendation
+from app.models.mission_plan import (
+    SearchMissionPlan,
+)
+from app.models.recommendation import (
+    OperationalRecommendation,
+)
 from app.models.search_area import SearchArea
-
 from app.services.decision_engine import (
     get_operational_recommendations,
 )
@@ -38,6 +51,11 @@ from app.services.scenario_manager import (
 from app.services.search_area_engine import (
     get_active_search_areas,
 )
+from app.services.sensor_detection_engine import (
+    get_active_detections,
+    get_active_sensor_statuses,
+    reset_sensor_detections,
+)
 from app.services.simulator import (
     get_simulated_assets,
 )
@@ -57,7 +75,9 @@ app = FastAPI(
 
 app.mount(
     "/static",
-    StaticFiles(directory="app/static"),
+    StaticFiles(
+        directory="app/static",
+    ),
     name="static",
 )
 
@@ -69,8 +89,7 @@ templates = Jinja2Templates(
 
 def _get_active_assets() -> list[Asset]:
     """
-    Devuelve los activos correspondientes
-    al escenario actualmente seleccionado.
+    Devuelve los activos del escenario activo.
     """
 
     scenario = get_active_scenario()
@@ -81,10 +100,10 @@ def _get_active_assets() -> list[Asset]:
     return get_simulated_assets()
 
 
-def _get_active_events() -> list[OperationalEvent]:
+def _get_active_events(
+) -> list[OperationalEvent]:
     """
-    Devuelve los eventos correspondientes
-    al escenario actualmente seleccionado.
+    Devuelve los eventos del escenario activo.
     """
 
     scenario = get_active_scenario()
@@ -98,8 +117,8 @@ def _get_active_events() -> list[OperationalEvent]:
 def _get_active_recommendations(
 ) -> list[OperationalRecommendation]:
     """
-    Devuelve las recomendaciones operacionales
-    del escenario actualmente seleccionado.
+    Devuelve las recomendaciones operativas
+    del escenario activo.
     """
 
     scenario = get_active_scenario()
@@ -113,7 +132,7 @@ def _get_active_recommendations(
 @app.get("/")
 def home() -> dict[str, str]:
     """
-    Información básica de la plataforma.
+    Información básica de FireScout.
     """
 
     return {
@@ -129,7 +148,7 @@ def home() -> dict[str, str]:
 @app.get("/health")
 def health() -> dict[str, str]:
     """
-    Estado de salud del backend.
+    Comprueba que la aplicación funciona.
     """
 
     return {
@@ -140,8 +159,7 @@ def health() -> dict[str, str]:
 @app.get("/scenarios")
 def get_scenarios() -> dict[str, object]:
     """
-    Devuelve los escenarios disponibles
-    y el escenario activo.
+    Devuelve los escenarios disponibles.
     """
 
     return {
@@ -156,7 +174,7 @@ def get_scenarios() -> dict[str, object]:
 @app.get("/scenario")
 def get_scenario() -> dict[str, str]:
     """
-    Devuelve el escenario actualmente seleccionado.
+    Devuelve el escenario activo.
     """
 
     return {
@@ -170,23 +188,27 @@ def select_scenario(
 ) -> dict[str, str]:
     """
     Cambia el escenario activo y reinicia
-    sus simulaciones y planes de misión.
+    sus simulaciones dinámicas.
     """
 
     selected_scenario = set_active_scenario(
         scenario
     )
 
-    reset_mission_execution(
-        selected_scenario
-    )
+    reset_mission_execution()
+    reset_sensor_detections()
 
-    if selected_scenario == ScenarioType.MARITIME_SAR:
+    if (
+        selected_scenario
+        == ScenarioType.MARITIME_SAR
+    ):
         reset_maritime_simulation()
 
     return {
         "active": selected_scenario.value,
-        "message": "Scenario changed successfully",
+        "message": (
+            "Scenario changed successfully"
+        ),
     }
 
 
@@ -198,7 +220,7 @@ def command_center(
     request: Request,
 ):
     """
-    Muestra el Command Center.
+    Muestra el centro de mando de FireScout.
     """
 
     assets = _get_active_assets()
@@ -251,7 +273,7 @@ def get_assets() -> list[Asset]:
 )
 def get_events() -> list[OperationalEvent]:
     """
-    Devuelve los eventos del escenario activo.
+    Devuelve los eventos operativos activos.
     """
 
     return _get_active_events()
@@ -259,12 +281,15 @@ def get_events() -> list[OperationalEvent]:
 
 @app.get(
     "/recommendations",
-    response_model=list[OperationalRecommendation],
+    response_model=list[
+        OperationalRecommendation
+    ],
 )
 def get_recommendations(
 ) -> list[OperationalRecommendation]:
     """
-    Devuelve las recomendaciones del Decision Engine.
+    Devuelve las recomendaciones del
+    Decision Engine.
     """
 
     return _get_active_recommendations()
@@ -274,10 +299,11 @@ def get_recommendations(
     "/environment",
     response_model=EnvironmentalConditions,
 )
-def get_environment() -> EnvironmentalConditions:
+def get_environment(
+) -> EnvironmentalConditions:
     """
-    Devuelve las condiciones ambientales utilizadas
-    para calcular la zona de búsqueda.
+    Devuelve las condiciones ambientales
+    del escenario activo.
     """
 
     return get_active_environment()
@@ -289,8 +315,7 @@ def get_environment() -> EnvironmentalConditions:
 )
 def get_search_areas() -> list[SearchArea]:
     """
-    Devuelve todas las zonas de búsqueda calculadas
-    para el escenario activo.
+    Devuelve todas las áreas de búsqueda.
     """
 
     return get_active_search_areas()
@@ -298,17 +323,14 @@ def get_search_areas() -> list[SearchArea]:
 
 @app.get(
     "/search-area",
-    response_model=SearchArea | None,
+    response_model=SearchArea,
 )
-def get_primary_search_area() -> SearchArea | None:
+def get_primary_search_area() -> SearchArea:
     """
-    Devuelve la primera zona de búsqueda activa.
+    Devuelve el área de búsqueda principal.
     """
 
     search_areas = get_active_search_areas()
-
-    if not search_areas:
-        return None
 
     return search_areas[0]
 
@@ -317,50 +339,83 @@ def get_primary_search_area() -> SearchArea | None:
     "/mission-plans",
     response_model=list[SearchMissionPlan],
 )
-def get_mission_plans() -> list[SearchMissionPlan]:
+def get_mission_plans(
+) -> list[SearchMissionPlan]:
     """
-    Devuelve los planes de búsqueda con progreso dinámico.
+    Devuelve todos los planes dinámicos del
+    escenario activo.
     """
 
-    return get_active_executed_mission_plans()
+    return (
+        get_active_executed_mission_plans()
+    )
 
 
 @app.get(
     "/mission-plan",
-    response_model=SearchMissionPlan | None,
+    response_model=SearchMissionPlan,
 )
 def get_primary_mission_plan(
-) -> SearchMissionPlan | None:
+) -> SearchMissionPlan:
     """
-    Devuelve el plan principal con progreso dinámico.
+    Devuelve el primer plan de misión activo.
     """
 
     mission_plans = (
         get_active_executed_mission_plans()
     )
 
-    if not mission_plans:
-        return None
-
     return mission_plans[0]
 
 
 @app.post("/mission/reset")
-def reset_active_mission() -> dict[str, str]:
+def reset_mission() -> dict[str, str]:
     """
-    Reinicia manualmente el progreso de la misión activa.
+    Reinicia el progreso de las misiones
+    y elimina las detecciones almacenadas.
     """
 
-    scenario = get_active_scenario()
+    reset_mission_execution()
+    reset_sensor_detections()
 
-    reset_mission_execution(
-        scenario
-    )
-
-    if scenario == ScenarioType.MARITIME_SAR:
+    if (
+        get_active_scenario()
+        == ScenarioType.MARITIME_SAR
+    ):
         reset_maritime_simulation()
 
     return {
         "status": "reset",
-        "scenario": scenario.value,
+        "message": (
+            "Mission execution and sensor "
+            "detections reset successfully"
+        ),
     }
+
+
+@app.get(
+    "/detections",
+    response_model=list[SensorDetection],
+)
+def get_detections(
+) -> list[SensorDetection]:
+    """
+    Devuelve las detecciones visibles
+    del escenario activo.
+    """
+
+    return get_active_detections()
+
+
+@app.get(
+    "/sensor-statuses",
+    response_model=list[SensorMissionStatus],
+)
+def get_sensor_statuses(
+) -> list[SensorMissionStatus]:
+    """
+    Devuelve el estado operativo de los sensores,
+    incluso cuando todavía no existe una detección.
+    """
+
+    return get_active_sensor_statuses()
