@@ -9,6 +9,7 @@ from app.models.asset import (
 from app.models.mission_plan import MissionPlanStatus
 from app.models.telemetry import Telemetry
 from app.services.mission_control import (
+    ActiveMission,
     get_active_mission,
 )
 from app.services.mission_execution_engine import (
@@ -24,17 +25,19 @@ _START_TIME = time.monotonic()
 
 MIN_MISSION_BATTERY = 30
 
+_RESCUE_EVENT_PREFIX = "rescue-"
+
 
 def get_simulated_assets() -> list[Asset]:
     """
     Devuelve los activos del escenario Wildfire.
 
-    Cada dron utiliza exclusivamente el estado
-    correspondiente a su plan asignado:
+    Orden de prioridad:
 
-    - Simulator Alpha ejecuta event-001.
-    - Simulator Bravo ejecuta event-002.
-    - Simulator Charlie permanece sin misión automática.
+    1. Misión de rescate activa.
+    2. Ruta automática de búsqueda.
+    3. Misión operativa convencional.
+    4. Movimiento base del simulador.
     """
 
     elapsed = (
@@ -48,15 +51,6 @@ def get_simulated_assets() -> list[Asset]:
         _create_charlie(elapsed),
     ]
 
-    # Conserva la compatibilidad con las misiones
-    # anteriores del Decision Engine.
-    assets = [
-        _apply_active_mission(asset)
-        for asset in assets
-    ]
-
-    # Calculamos una sola vez todos los estados
-    # dinámicos del Mission Planner.
     snapshots = get_mission_execution_snapshots(
         ScenarioType.WILDFIRE
     )
@@ -69,19 +63,61 @@ def get_simulated_assets() -> list[Asset]:
     synchronized_assets: list[Asset] = []
 
     for asset in assets:
+        active_mission = get_active_mission(
+            asset.id
+        )
+
         snapshot = snapshots_by_asset_id.get(
             asset.id
         )
 
-        if snapshot is not None:
+        if _is_rescue_mission(
+            active_mission
+        ):
+            # Una víctima confirmada interrumpe
+            # inmediatamente la ruta de búsqueda.
+            asset = _apply_active_mission(
+                asset=asset,
+                mission=active_mission,
+            )
+
+        elif snapshot is not None:
+            # El Mission Planner controla el dron
+            # durante tránsito y búsqueda.
             asset = _apply_search_execution(
                 asset=asset,
                 snapshot=snapshot,
             )
 
-        synchronized_assets.append(asset)
+        elif active_mission is not None:
+            # Compatibilidad con las asignaciones
+            # convencionales del Decision Engine.
+            asset = _apply_active_mission(
+                asset=asset,
+                mission=active_mission,
+            )
+
+        synchronized_assets.append(
+            asset
+        )
 
     return synchronized_assets
+
+
+def _is_rescue_mission(
+    mission: ActiveMission | None,
+) -> bool:
+    """
+    Indica si la misión activa corresponde
+    a una respuesta de rescate.
+    """
+
+    return (
+        mission is not None
+        and mission.event_id.startswith(
+            _RESCUE_EVENT_PREFIX
+        )
+    )
 
 
 def _apply_search_execution(
@@ -89,11 +125,8 @@ def _apply_search_execution(
     snapshot: MissionExecutionSnapshot,
 ) -> Asset:
     """
-    Sincroniza un activo con su propio plan de búsqueda.
-
-    El marcador visible, la posición, el rumbo y la
-    velocidad proceden del mismo snapshot que calcula
-    el porcentaje de cobertura.
+    Sincroniza el activo con su plan automático
+    de búsqueda.
     """
 
     if asset.telemetry is None:
@@ -133,6 +166,120 @@ def _apply_search_execution(
     return asset
 
 
+def _apply_active_mission(
+    asset: Asset,
+    mission: ActiveMission,
+) -> Asset:
+    """
+    Mueve el activo desde el punto inicial
+    de la misión hasta su objetivo.
+
+    La misión conserva su instante original, por lo que
+    el movimiento no se reinicia en cada actualización.
+    """
+
+    if asset.telemetry is None:
+        return asset
+
+    if (
+        asset.battery is None
+        or asset.battery < MIN_MISSION_BATTERY
+    ):
+        return asset
+
+    mission_elapsed = (
+        time.monotonic()
+        - mission.assigned_at
+    )
+
+    distance_km = _calculate_distance_km(
+        latitude_1=mission.start_latitude,
+        longitude_1=mission.start_longitude,
+        latitude_2=mission.target_latitude,
+        longitude_2=mission.target_longitude,
+    )
+
+    distance_m = (
+        distance_km * 1000.0
+    )
+
+    if distance_m <= 0:
+        progress = 1.0
+    else:
+        travelled_m = (
+            mission_elapsed
+            * mission.cruise_speed_mps
+        )
+
+        progress = min(
+            1.0,
+            travelled_m / distance_m,
+        )
+
+    latitude = (
+        mission.start_latitude
+        + (
+            mission.target_latitude
+            - mission.start_latitude
+        )
+        * progress
+    )
+
+    longitude = (
+        mission.start_longitude
+        + (
+            mission.target_longitude
+            - mission.start_longitude
+        )
+        * progress
+    )
+
+    arrived = (
+        progress >= 1.0
+    )
+
+    if arrived:
+        heading = asset.telemetry.heading
+        speed = 0.0
+        asset.status = AssetStatus.READY
+    else:
+        heading = _calculate_target_heading(
+            current_latitude=latitude,
+            current_longitude=longitude,
+            target_latitude=(
+                mission.target_latitude
+            ),
+            target_longitude=(
+                mission.target_longitude
+            ),
+        )
+
+        speed = mission.cruise_speed_mps
+        asset.status = AssetStatus.ACTIVE
+
+    asset.telemetry.latitude = round(
+        latitude,
+        6,
+    )
+
+    asset.telemetry.longitude = round(
+        longitude,
+        6,
+    )
+
+    asset.telemetry.speed = round(
+        speed,
+        1,
+    )
+
+    asset.telemetry.heading = round(
+        heading,
+        1,
+    )
+
+    return asset
+
+
 def _create_alpha(
     elapsed: float,
 ) -> Asset:
@@ -144,12 +291,14 @@ def _create_alpha(
 
     latitude = (
         41.3885
-        + 0.0018 * math.sin(angle)
+        + 0.0018
+        * math.sin(angle)
     )
 
     longitude = (
         2.1705
-        + 0.0024 * math.cos(angle)
+        + 0.0024
+        * math.cos(angle)
     )
 
     latitude_speed = (
@@ -272,124 +421,6 @@ def _create_charlie(
     )
 
 
-def _apply_active_mission(
-    asset: Asset,
-) -> Asset:
-    """
-    Mantiene la compatibilidad con las asignaciones
-    anteriores del Decision Engine.
-
-    Si existe un plan dinámico del Día 7, su snapshot
-    sustituirá después esta posición.
-    """
-
-    mission = get_active_mission(
-        asset.id
-    )
-
-    if mission is None:
-        return asset
-
-    if asset.telemetry is None:
-        return asset
-
-    if (
-        asset.battery is None
-        or asset.battery < MIN_MISSION_BATTERY
-    ):
-        return asset
-
-    mission_elapsed = (
-        time.monotonic()
-        - mission.assigned_at
-    )
-
-    distance_km = _calculate_distance_km(
-        latitude_1=mission.start_latitude,
-        longitude_1=mission.start_longitude,
-        latitude_2=mission.target_latitude,
-        longitude_2=mission.target_longitude,
-    )
-
-    distance_meters = (
-        distance_km * 1000
-    )
-
-    if distance_meters <= 0:
-        progress = 1.0
-    else:
-        travelled_meters = (
-            mission_elapsed
-            * mission.cruise_speed_mps
-        )
-
-        progress = min(
-            1.0,
-            travelled_meters
-            / distance_meters,
-        )
-
-    latitude = (
-        mission.start_latitude
-        + (
-            mission.target_latitude
-            - mission.start_latitude
-        )
-        * progress
-    )
-
-    longitude = (
-        mission.start_longitude
-        + (
-            mission.target_longitude
-            - mission.start_longitude
-        )
-        * progress
-    )
-
-    heading = _calculate_target_heading(
-        current_latitude=latitude,
-        current_longitude=longitude,
-        target_latitude=(
-            mission.target_latitude
-        ),
-        target_longitude=(
-            mission.target_longitude
-        ),
-    )
-
-    arrived = (
-        progress >= 1.0
-    )
-
-    asset.telemetry.latitude = round(
-        latitude,
-        6,
-    )
-
-    asset.telemetry.longitude = round(
-        longitude,
-        6,
-    )
-
-    asset.telemetry.heading = round(
-        heading,
-        1,
-    )
-
-    if arrived:
-        asset.telemetry.speed = 0.0
-    else:
-        asset.telemetry.speed = round(
-            mission.cruise_speed_mps,
-            1,
-        )
-
-        asset.status = AssetStatus.ACTIVE
-
-    return asset
-
-
 def _build_asset(
     asset_id: str,
     name: str,
@@ -457,21 +488,10 @@ def _calculate_distance_km(
     longitude_2: float,
 ) -> float:
     """
-    Calcula la distancia entre dos coordenadas
-    mediante la fórmula de Haversine.
+    Calcula la distancia geográfica usando Haversine.
     """
 
     earth_radius_km = 6371.0
-
-    latitude_delta = math.radians(
-        latitude_2
-        - latitude_1
-    )
-
-    longitude_delta = math.radians(
-        longitude_2
-        - longitude_1
-    )
 
     latitude_1_radians = math.radians(
         latitude_1
@@ -481,23 +501,31 @@ def _calculate_distance_km(
         latitude_2
     )
 
+    latitude_delta = math.radians(
+        latitude_2 - latitude_1
+    )
+
+    longitude_delta = math.radians(
+        longitude_2 - longitude_1
+    )
+
     haversine_value = (
         math.sin(
-            latitude_delta / 2
+            latitude_delta / 2.0
         ) ** 2
         + math.cos(latitude_1_radians)
         * math.cos(latitude_2_radians)
         * math.sin(
-            longitude_delta / 2
+            longitude_delta / 2.0
         ) ** 2
     )
 
     angular_distance = (
-        2
+        2.0
         * math.atan2(
             math.sqrt(haversine_value),
             math.sqrt(
-                1 - haversine_value
+                1.0 - haversine_value
             ),
         )
     )
@@ -515,7 +543,8 @@ def _calculate_target_heading(
     target_longitude: float,
 ) -> float:
     """
-    Calcula el rumbo hacia una posición objetivo.
+    Calcula el rumbo desde la posición actual
+    hasta el objetivo.
     """
 
     latitude_1 = math.radians(
@@ -561,7 +590,7 @@ def _calculate_heading(
     longitude_speed: float,
 ) -> float:
     """
-    Calcula el rumbo usando las componentes
+    Calcula el rumbo a partir de las componentes
     del movimiento.
     """
 
