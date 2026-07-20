@@ -22,6 +22,15 @@ from app.services.scenario_manager import ScenarioType
 
 
 _START_TIME = time.monotonic()
+def reset_wildfire_simulation() -> None:
+    """
+    Reinicia el simulador Wildfire y restaura
+    las baterías iniciales de los drones.
+    """
+
+    global _START_TIME
+
+    _START_TIME = time.monotonic()
 
 MIN_MISSION_BATTERY = 30
 

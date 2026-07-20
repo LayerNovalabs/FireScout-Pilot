@@ -2,6 +2,9 @@ const sensorDetectionMarkers = new Map();
 const sensorDetectionCircles = new Map();
 const previousDetectionStatuses = new Map();
 
+let activeOperatorNotification = null;
+let operatorNotificationTimeout = null;
+
 
 function injectSensorDetectionStyles() {
     if (
@@ -145,6 +148,69 @@ function injectSensorDetectionStyles() {
 
             100% {
                 transform: scale(1);
+            }
+        }
+
+        .operator-detection-notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            z-index: 5000;
+            width: min(460px, calc(100% - 32px));
+            padding: 15px 18px;
+            border: 1px solid rgba(239, 68, 68, 0.85);
+            border-radius: 12px;
+            background: rgba(127, 29, 29, 0.96);
+            color: #fee2e2;
+            box-shadow: 0 16px 45px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+            opacity: 0;
+            transform: translate(-50%, -30px);
+            transition:
+                opacity 0.25s ease,
+                transform 0.25s ease;
+        }
+
+        .operator-detection-notification.visible {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        .operator-notification-title {
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .operator-notification-message {
+            margin-top: 6px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .operator-notification-action {
+            margin-top: 8px;
+            color: #fecaca;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .sensor-panel-highlight {
+            animation: sensor-panel-focus 2.4s ease-out;
+        }
+
+        @keyframes sensor-panel-focus {
+            0% {
+                box-shadow:
+                    0 0 0 4px rgba(239, 68, 68, 0.8),
+                    0 14px 40px rgba(0, 0, 0, 0.4);
+            }
+
+            100% {
+                box-shadow:
+                    0 14px 40px rgba(0, 0, 0, 0.4);
             }
         }
 
@@ -323,6 +389,171 @@ function detectionPopup(detection) {
 }
 
 
+function focusSensorIntelligencePanel() {
+    const sensorPanel = document.getElementById(
+        "sensor-detection-panel"
+    );
+
+    const bottomSection = document.getElementById(
+        "command-center-bottom-section"
+    );
+
+    const target = (
+        sensorPanel
+        || bottomSection
+    );
+
+    if (!target) {
+        return;
+    }
+
+    target.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+    });
+
+    if (!sensorPanel) {
+        return;
+    }
+
+    sensorPanel.classList.remove(
+        "sensor-panel-highlight"
+    );
+
+    void sensorPanel.offsetWidth;
+
+    sensorPanel.classList.add(
+        "sensor-panel-highlight"
+    );
+
+    setTimeout(
+        () => {
+            sensorPanel.classList.remove(
+                "sensor-panel-highlight"
+            );
+        },
+        2500
+    );
+}
+
+
+function closeOperatorNotification() {
+    if (!activeOperatorNotification) {
+        return;
+    }
+
+    const notification = (
+        activeOperatorNotification
+    );
+
+    activeOperatorNotification = null;
+
+    notification.classList.remove(
+        "visible"
+    );
+
+    setTimeout(
+        () => {
+            notification.remove();
+        },
+        300
+    );
+
+    if (operatorNotificationTimeout) {
+        clearTimeout(
+            operatorNotificationTimeout
+        );
+
+        operatorNotificationTimeout = null;
+    }
+}
+
+
+function showOperatorDetectionNotification(
+    detection
+) {
+    closeOperatorNotification();
+
+    const notification = document.createElement(
+        "div"
+    );
+
+    notification.className = (
+        "operator-detection-notification"
+    );
+
+    notification.setAttribute(
+        "role",
+        "button"
+    );
+
+    notification.setAttribute(
+        "tabindex",
+        "0"
+    );
+
+    notification.innerHTML = `
+        <div class="operator-notification-title">
+            Confirmed person detection
+        </div>
+
+        <div class="operator-notification-message">
+            ${detection.source_asset_name}
+            confirmed a person with
+            ${Number(
+                detection.confidence_percent
+            ).toFixed(1)}% confidence.
+        </div>
+
+        <div class="operator-notification-action">
+            Click to open Sensor Intelligence
+        </div>
+    `;
+
+    const openDetectionDetails = () => {
+        focusSensorIntelligencePanel();
+        closeOperatorNotification();
+    };
+
+    notification.addEventListener(
+        "click",
+        openDetectionDetails
+    );
+
+    notification.addEventListener(
+        "keydown",
+        (event) => {
+            if (
+                event.key === "Enter"
+                || event.key === " "
+            ) {
+                event.preventDefault();
+                openDetectionDetails();
+            }
+        }
+    );
+
+    document.body.appendChild(
+        notification
+    );
+
+    activeOperatorNotification = notification;
+
+    requestAnimationFrame(
+        () => {
+            notification.classList.add(
+                "visible"
+            );
+        }
+    );
+
+    operatorNotificationTimeout = setTimeout(
+        closeOperatorNotification,
+        15000
+    );
+}
+
+
 function updateDetectionMarker(detection) {
     if (
         typeof map === "undefined"
@@ -424,6 +655,10 @@ function updateDetectionMarker(detection) {
             {
                 animate: true,
             }
+        );
+
+        showOperatorDetectionNotification(
+            detection
         );
     }
 

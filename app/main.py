@@ -19,6 +19,9 @@ from app.models.event import OperationalEvent
 from app.models.mission_plan import (
     SearchMissionPlan,
 )
+from app.models.operational_log import (
+    OperationalTimeline,
+)
 from app.models.recommendation import (
     OperationalRecommendation,
 )
@@ -43,6 +46,14 @@ from app.services.mission_runtime import (
     get_active_executed_mission_plans,
     reset_mission_execution,
 )
+from app.services.mission_control import (
+    clear_all_missions,
+)
+from app.services.operational_log_service import (
+    get_active_operational_timeline,
+    record_scenario_change,
+    reset_operational_log,
+)
 from app.services.scenario_manager import (
     ScenarioType,
     get_active_scenario,
@@ -56,8 +67,10 @@ from app.services.sensor_detection_engine import (
     get_active_sensor_statuses,
     reset_sensor_detections,
 )
+
 from app.services.simulator import (
     get_simulated_assets,
+    reset_wildfire_simulation,
 )
 from app.services.wildfire_events import (
     get_wildfire_events,
@@ -203,6 +216,10 @@ def select_scenario(
         == ScenarioType.MARITIME_SAR
     ):
         reset_maritime_simulation()
+
+    record_scenario_change(
+        selected_scenario
+    )
 
     return {
         "active": selected_scenario.value,
@@ -368,27 +385,36 @@ def get_primary_mission_plan(
     return mission_plans[0]
 
 
+
 @app.post("/mission/reset")
 def reset_mission() -> dict[str, str]:
     """
-    Reinicia el progreso de las misiones
-    y elimina las detecciones almacenadas.
+    Reinicia misiones, sensores, baterías
+    e historial del escenario activo.
     """
+
+    active_scenario = get_active_scenario()
 
     reset_mission_execution()
     reset_sensor_detections()
+    reset_operational_log(
+        active_scenario
+    )
+    clear_all_missions()
 
     if (
-        get_active_scenario()
+        active_scenario
         == ScenarioType.MARITIME_SAR
     ):
         reset_maritime_simulation()
+    else:
+        reset_wildfire_simulation()
 
     return {
         "status": "reset",
         "message": (
-            "Mission execution and sensor "
-            "detections reset successfully"
+            "Mission, sensors, batteries and "
+            "operational timeline reset successfully"
         ),
     }
 
@@ -419,3 +445,17 @@ def get_sensor_statuses(
     """
 
     return get_active_sensor_statuses()
+
+
+@app.get(
+    "/operational-timeline",
+    response_model=OperationalTimeline,
+)
+def get_operational_timeline(
+) -> OperationalTimeline:
+    """
+    Devuelve la cronología operativa completa
+    del escenario activo.
+    """
+
+    return get_active_operational_timeline()
