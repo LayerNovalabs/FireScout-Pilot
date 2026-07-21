@@ -6,6 +6,10 @@ from app.models.asset import (
     AssetStatus,
     AssetType,
 )
+from app.models.detection import (
+    DetectionStatus,
+    SensorDetection,
+)
 from app.models.mission_plan import MissionPlanStatus
 from app.models.telemetry import Telemetry
 from app.services.mission_execution_engine import (
@@ -16,6 +20,9 @@ from app.services.mission_runtime import (
 )
 from app.services.scenario_manager import ScenarioType
 from app.services.search_area_engine import SearchAreaEngine
+from app.services.sensor_detection_engine import (
+    get_detections,
+)
 
 
 SIMULATION_TIME_SCALE = 8.0
@@ -30,31 +37,45 @@ _BOAT_SPEED_MPS = 8.0
 
 _MISSION_START_TIME: float | None = None
 
+_RESCUE_START_TIME: float | None = None
+_RESCUE_START_LATITUDE: float | None = None
+_RESCUE_START_LONGITUDE: float | None = None
+
 
 def reset_maritime_simulation() -> None:
     """
-    Reinicia el reloj utilizado por la embarcación
-    y por el consumo de batería de los activos.
+    Reinicia completamente la simulación marítima.
+
+    También elimina la ruta de rescate anterior para
+    que el barco vuelva a comenzar desde su posición
+    inicial.
     """
 
     global _MISSION_START_TIME
+    global _RESCUE_START_TIME
+    global _RESCUE_START_LATITUDE
+    global _RESCUE_START_LONGITUDE
 
     _MISSION_START_TIME = time.monotonic()
+
+    _RESCUE_START_TIME = None
+    _RESCUE_START_LATITUDE = None
+    _RESCUE_START_LONGITUDE = None
 
 
 def get_maritime_assets() -> list[Asset]:
     """
     Devuelve los activos del escenario Maritime SAR.
 
-    El dron SAR utiliza exactamente el mismo estado
-    dinámico que el Mission Planner:
+    El dron utiliza el estado del Mission Planner.
 
-    - durante el tránsito se dirige al primer waypoint;
-    - durante la búsqueda recorre las líneas paralelas;
-    - el marcador y el porcentaje quedan sincronizados.
+    El barco:
 
-    La embarcación continúa navegando hacia el centro
-    estimado de la zona de búsqueda para quedar preparada.
+    - se dirige primero al centro de búsqueda;
+    - espera mientras no exista una víctima confirmada;
+    - cuando el sensor confirma a la persona, cambia
+      inmediatamente su destino;
+    - navega hacia las coordenadas exactas de la víctima.
     """
 
     global _MISSION_START_TIME
@@ -68,7 +89,8 @@ def get_maritime_assets() -> list[Asset]:
     current_time = time.monotonic()
 
     real_elapsed_seconds = (
-        current_time - _MISSION_START_TIME
+        current_time
+        - _MISSION_START_TIME
     )
 
     simulated_elapsed_seconds = (
@@ -76,8 +98,10 @@ def get_maritime_assets() -> list[Asset]:
         * SIMULATION_TIME_SCALE
     )
 
-    search_areas = SearchAreaEngine().get_search_areas(
-        ScenarioType.MARITIME_SAR
+    search_areas = (
+        SearchAreaEngine().get_search_areas(
+            ScenarioType.MARITIME_SAR
+        )
     )
 
     if not search_areas:
@@ -85,11 +109,11 @@ def get_maritime_assets() -> list[Asset]:
 
     target_area = search_areas[0]
 
-    target_latitude = (
+    staging_latitude = (
         target_area.estimated_center.latitude
     )
 
-    target_longitude = (
+    staging_longitude = (
         target_area.estimated_center.longitude
     )
 
@@ -99,22 +123,53 @@ def get_maritime_assets() -> list[Asset]:
         )
     )
 
+    confirmed_detection = (
+        _get_confirmed_maritime_detection()
+    )
+
     drone = _create_sar_drone(
         snapshot=execution_snapshot,
         real_elapsed_seconds=real_elapsed_seconds,
     )
 
     boat = _create_rescue_boat(
-        elapsed_seconds=simulated_elapsed_seconds,
-        real_elapsed_seconds=real_elapsed_seconds,
-        target_latitude=target_latitude,
-        target_longitude=target_longitude,
+        staging_elapsed_seconds=(
+            simulated_elapsed_seconds
+        ),
+        real_elapsed_seconds=(
+            real_elapsed_seconds
+        ),
+        current_time=current_time,
+        staging_latitude=staging_latitude,
+        staging_longitude=staging_longitude,
+        detection=confirmed_detection,
     )
 
     return [
         drone,
         boat,
     ]
+
+
+def _get_confirmed_maritime_detection(
+) -> SensorDetection | None:
+    """
+    Obtiene la primera detección confirmada de
+    una persona en el escenario Maritime SAR.
+    """
+
+    detections = get_detections(
+        ScenarioType.MARITIME_SAR
+    )
+
+    for detection in detections:
+        if (
+            detection.status
+            == DetectionStatus.CONFIRMED
+        ):
+            return detection
+
+    return None
 
 
 def _create_sar_drone(
@@ -184,38 +239,131 @@ def _create_sar_drone(
 
 
 def _create_rescue_boat(
-    elapsed_seconds: float,
+    staging_elapsed_seconds: float,
     real_elapsed_seconds: float,
-    target_latitude: float,
-    target_longitude: float,
+    current_time: float,
+    staging_latitude: float,
+    staging_longitude: float,
+    detection: SensorDetection | None,
 ) -> Asset:
     """
     Crea la embarcación de rescate.
 
-    La embarcación se dirige al centro probable de
-    la zona y queda preparada para actuar cuando
-    el dron localice a la víctima.
+    Antes de la detección se dirige al centro de
+    búsqueda. Después de la confirmación navega
+    hacia las coordenadas exactas de la víctima.
     """
 
-    (
-        latitude,
-        longitude,
-        heading,
-        arrived,
-    ) = _move_towards_target(
-        start_latitude=_BOAT_START_LATITUDE,
-        start_longitude=_BOAT_START_LONGITUDE,
-        target_latitude=target_latitude,
-        target_longitude=target_longitude,
-        speed_mps=_BOAT_SPEED_MPS,
-        elapsed_seconds=elapsed_seconds,
-        arrival_radius_meters=15.0,
-    )
+    global _RESCUE_START_TIME
+    global _RESCUE_START_LATITUDE
+    global _RESCUE_START_LONGITUDE
+
+    if detection is not None:
+        if (
+            _RESCUE_START_TIME is None
+            or _RESCUE_START_LATITUDE is None
+            or _RESCUE_START_LONGITUDE is None
+        ):
+            (
+                current_latitude,
+                current_longitude,
+                _,
+                _,
+            ) = _move_towards_target(
+                start_latitude=(
+                    _BOAT_START_LATITUDE
+                ),
+                start_longitude=(
+                    _BOAT_START_LONGITUDE
+                ),
+                target_latitude=(
+                    staging_latitude
+                ),
+                target_longitude=(
+                    staging_longitude
+                ),
+                speed_mps=_BOAT_SPEED_MPS,
+                elapsed_seconds=(
+                    staging_elapsed_seconds
+                ),
+                arrival_radius_meters=15.0,
+            )
+
+            _RESCUE_START_TIME = current_time
+            _RESCUE_START_LATITUDE = (
+                current_latitude
+            )
+            _RESCUE_START_LONGITUDE = (
+                current_longitude
+            )
+
+        rescue_elapsed_seconds = (
+            current_time
+            - _RESCUE_START_TIME
+        )
+
+        simulated_rescue_elapsed = (
+            rescue_elapsed_seconds
+            * SIMULATION_TIME_SCALE
+        )
+
+        (
+            latitude,
+            longitude,
+            heading,
+            arrived,
+        ) = _move_towards_target(
+            start_latitude=(
+                _RESCUE_START_LATITUDE
+            ),
+            start_longitude=(
+                _RESCUE_START_LONGITUDE
+            ),
+            target_latitude=(
+                detection.latitude
+            ),
+            target_longitude=(
+                detection.longitude
+            ),
+            speed_mps=_BOAT_SPEED_MPS,
+            elapsed_seconds=(
+                simulated_rescue_elapsed
+            ),
+            arrival_radius_meters=20.0,
+        )
+
+    else:
+        (
+            latitude,
+            longitude,
+            heading,
+            arrived,
+        ) = _move_towards_target(
+            start_latitude=(
+                _BOAT_START_LATITUDE
+            ),
+            start_longitude=(
+                _BOAT_START_LONGITUDE
+            ),
+            target_latitude=(
+                staging_latitude
+            ),
+            target_longitude=(
+                staging_longitude
+            ),
+            speed_mps=_BOAT_SPEED_MPS,
+            elapsed_seconds=(
+                staging_elapsed_seconds
+            ),
+            arrival_radius_meters=15.0,
+        )
 
     return Asset(
         id="rescue-boat-001",
         name="Rescue Boat One",
-        asset_type=AssetType.MARITIME_VEHICLE,
+        asset_type=(
+            AssetType.MARITIME_VEHICLE
+        ),
         status=(
             AssetStatus.READY
             if arrived
@@ -250,17 +398,24 @@ def _move_towards_target(
     speed_mps: float,
     elapsed_seconds: float,
     arrival_radius_meters: float,
-) -> tuple[float, float, float, bool]:
+) -> tuple[
+    float,
+    float,
+    float,
+    bool,
+]:
     """
     Calcula la posición de un activo que se desplaza
     en línea recta hacia un objetivo.
     """
 
-    total_distance_meters = _calculate_distance_meters(
-        latitude_1=start_latitude,
-        longitude_1=start_longitude,
-        latitude_2=target_latitude,
-        longitude_2=target_longitude,
+    total_distance_meters = (
+        _calculate_distance_meters(
+            latitude_1=start_latitude,
+            longitude_1=start_longitude,
+            latitude_2=target_latitude,
+            longitude_2=target_longitude,
+        )
     )
 
     heading = _calculate_heading(
@@ -270,7 +425,10 @@ def _move_towards_target(
         longitude_2=target_longitude,
     )
 
-    if total_distance_meters <= arrival_radius_meters:
+    if (
+        total_distance_meters
+        <= arrival_radius_meters
+    ):
         return (
             round(target_latitude, 6),
             round(target_longitude, 6),
@@ -335,8 +493,8 @@ def _calculate_distance_meters(
     longitude_2: float,
 ) -> float:
     """
-    Calcula la distancia entre dos coordenadas mediante
-    la fórmula de Haversine.
+    Calcula la distancia entre dos coordenadas
+    mediante la fórmula de Haversine.
     """
 
     earth_radius_meters = 6_371_000.0
@@ -350,11 +508,13 @@ def _calculate_distance_meters(
     )
 
     latitude_delta = math.radians(
-        latitude_2 - latitude_1
+        latitude_2
+        - latitude_1
     )
 
     longitude_delta = math.radians(
-        longitude_2 - longitude_1
+        longitude_2
+        - longitude_1
     )
 
     haversine_value = (
@@ -368,11 +528,14 @@ def _calculate_distance_meters(
         ) ** 2
     )
 
-    angular_distance = 2 * math.atan2(
-        math.sqrt(haversine_value),
-        math.sqrt(
-            1 - haversine_value
-        ),
+    angular_distance = (
+        2
+        * math.atan2(
+            math.sqrt(haversine_value),
+            math.sqrt(
+                1 - haversine_value
+            ),
+        )
     )
 
     return (
@@ -388,7 +551,8 @@ def _calculate_heading(
     longitude_2: float,
 ) -> float:
     """
-    Calcula el rumbo desde una posición hasta otra.
+    Calcula el rumbo desde una posición
+    hasta otra.
     """
 
     latitude_1_radians = math.radians(
@@ -400,7 +564,8 @@ def _calculate_heading(
     )
 
     longitude_delta = math.radians(
-        longitude_2 - longitude_1
+        longitude_2
+        - longitude_1
     )
 
     east_component = (
