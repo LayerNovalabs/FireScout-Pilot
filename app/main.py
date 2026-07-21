@@ -1,5 +1,8 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import (
+    HTMLResponse,
+    RedirectResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -142,20 +145,19 @@ def _get_active_recommendations(
     return get_operational_recommendations()
 
 
-@app.get("/")
-def home() -> dict[str, str]:
+@app.get(
+    "/",
+    include_in_schema=False,
+)
+def home() -> RedirectResponse:
     """
-    Información básica de FireScout.
+    Abre directamente el Command Center.
     """
 
-    return {
-        "name": "FireScout Platform",
-        "status": "running",
-        "version": "0.1.0",
-        "active_scenario": (
-            get_active_scenario().value
-        ),
-    }
+    return RedirectResponse(
+        url="/command-center",
+        status_code=302,
+    )
 
 
 @app.get("/health")
