@@ -238,6 +238,7 @@ def select_scenario(
 def command_center(
     request: Request,
 ):
+    reset_mission()
     """
     Muestra el centro de mando de FireScout.
     """
