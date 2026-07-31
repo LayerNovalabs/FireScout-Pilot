@@ -1,4 +1,8 @@
-from fastapi import FastAPI, Request
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Request,
+)
 from fastapi.responses import (
     HTMLResponse,
     RedirectResponse,
@@ -25,6 +29,9 @@ from app.models.mission_plan import (
 from app.models.operational_log import (
     OperationalTimeline,
 )
+from app.models.pilot_telemetry import (
+    PilotTelemetry,
+)
 from app.models.recommendation import (
     OperationalRecommendation,
 )
@@ -45,17 +52,22 @@ from app.services.maritime_simulator import (
     get_maritime_assets,
     reset_maritime_simulation,
 )
+from app.services.mission_control import (
+    clear_all_missions,
+)
 from app.services.mission_runtime import (
     get_active_executed_mission_plans,
     reset_mission_execution,
-)
-from app.services.mission_control import (
-    clear_all_missions,
 )
 from app.services.operational_log_service import (
     get_active_operational_timeline,
     record_scenario_change,
     reset_operational_log,
+)
+from app.services.pilot_telemetry_service import (
+    get_all_pilot_telemetry,
+    get_pilot_telemetry,
+    save_pilot_telemetry,
 )
 from app.services.scenario_manager import (
     ScenarioType,
@@ -70,7 +82,6 @@ from app.services.sensor_detection_engine import (
     get_active_sensor_statuses,
     reset_sensor_detections,
 )
-
 from app.services.simulator import (
     get_simulated_assets,
     reset_wildfire_simulation,
@@ -158,6 +169,23 @@ def home() -> RedirectResponse:
         url="/command-center",
         status_code=302,
     )
+@app.get(
+    "/pilot-center",
+    response_class=HTMLResponse,
+)
+def pilot_center(
+    request: Request,
+):
+    """
+    Muestra el panel de telemetría
+    de los drones piloto.
+    """
+
+    return templates.TemplateResponse(
+        request=request,
+        name="pilot_center.html",
+        context={},
+    )
 
 
 @app.get("/health")
@@ -238,10 +266,11 @@ def select_scenario(
 def command_center(
     request: Request,
 ):
-    reset_mission()
     """
     Muestra el centro de mando de FireScout.
     """
+
+    reset_mission()
 
     assets = _get_active_assets()
 
@@ -388,7 +417,6 @@ def get_primary_mission_plan(
     return mission_plans[0]
 
 
-
 @app.post("/mission/reset")
 def reset_mission() -> dict[str, str]:
     """
@@ -462,3 +490,60 @@ def get_operational_timeline(
     """
 
     return get_active_operational_timeline()
+
+
+@app.post(
+    "/api/drones/telemetry",
+    response_model=PilotTelemetry,
+    status_code=201,
+)
+def receive_pilot_telemetry(
+    telemetry: PilotTelemetry,
+) -> PilotTelemetry:
+    """
+    Recibe y guarda la última telemetría
+    enviada por un dron piloto.
+    """
+
+    return save_pilot_telemetry(
+        telemetry
+    )
+
+
+@app.get(
+    "/api/drones",
+    response_model=list[PilotTelemetry],
+)
+def get_pilot_drones(
+) -> list[PilotTelemetry]:
+    """
+    Devuelve la última telemetría conocida
+    de todos los drones piloto.
+    """
+
+    return get_all_pilot_telemetry()
+
+
+@app.get(
+    "/api/drones/{drone_id}",
+    response_model=PilotTelemetry,
+)
+def get_pilot_drone(
+    drone_id: str,
+) -> PilotTelemetry:
+    """
+    Devuelve la última telemetría conocida
+    de un dron piloto concreto.
+    """
+
+    telemetry = get_pilot_telemetry(
+        drone_id
+    )
+
+    if telemetry is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Drone telemetry not found",
+        )
+
+    return telemetry

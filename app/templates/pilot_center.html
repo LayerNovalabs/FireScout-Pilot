@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>FireScout Pilot Center</title>
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #e6edf3;
+            background: #08111f;
+        }
+
+        header {
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 14px 28px;
+            border-bottom: 1px solid #26364a;
+            background: #0d1828;
+        }
+
+        .brand {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .brand span {
+            color: #38bdf8;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #9fb3c8;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #f59e0b;
+        }
+
+        .status-dot.online {
+            background: #22c55e;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+        }
+
+        .status-dot.error {
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+        }
+
+        main {
+            padding: 24px;
+        }
+
+        .page-header {
+            margin-bottom: 20px;
+        }
+
+        .page-header h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        .page-header p {
+            margin: 0;
+            color: #8fa3b8;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns:
+                minmax(420px, 1.5fr)
+                minmax(300px, 0.7fr);
+            gap: 18px;
+            min-height: 650px;
+        }
+
+        .panel {
+            padding: 20px;
+            border: 1px solid #26364a;
+            border-radius: 12px;
+            background: #101d2e;
+        }
+
+        .panel h2 {
+            margin: 0 0 18px;
+            font-size: 15px;
+            color: #9fb3c8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .map-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #pilot-map {
+            flex: 1;
+            width: 100%;
+            min-height: 560px;
+            border: 1px solid #3c5067;
+            border-radius: 10px;
+            background: #0a1523;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .summary-card {
+            padding: 14px;
+            border: 1px solid #293d54;
+            border-radius: 9px;
+            background: #0b1726;
+        }
+
+        .summary-label {
+            margin-bottom: 7px;
+            font-size: 12px;
+            color: #8ea3b9;
+            text-transform: uppercase;
+        }
+
+        .summary-value {
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .drone-card {
+            margin-bottom: 14px;
+            padding: 15px;
+            border: 1px solid #293d54;
+            border-radius: 9px;
+            background: #0b1726;
+        }
+
+        .drone-card:last-child {
+            margin-bottom: 0;
+        }
+
+        .drone-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-weight: 700;
+        }
+
+        .drone-status {
+            color: #86efac;
+        }
+
+        .drone-status.warning {
+            color: #fbbf24;
+        }
+
+        .drone-status.error {
+            color: #f87171;
+        }
+
+        .drone-details {
+            margin-top: 12px;
+            font-size: 13px;
+            line-height: 1.7;
+            color: #9fb3c8;
+        }
+
+        .drone-details strong {
+            color: #e6edf3;
+        }
+
+        .empty-state {
+            padding: 16px;
+            color: #9fb3c8;
+            border: 1px dashed #3c5067;
+            border-radius: 8px;
+            line-height: 1.5;
+        }
+
+        .navigation-link {
+            color: #7dd3fc;
+            text-decoration: none;
+        }
+
+        .navigation-link:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 950px) {
+            header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            #pilot-map {
+                min-height: 440px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="brand">
+            Fire<span>Scout</span> Pilot
+        </div>
+
+        <div class="system-status">
+            <span
+                id="connection-dot"
+                class="status-dot"
+            ></span>
+
+            <span id="connection-text">
+                Connecting...
+            </span>
+        </div>
+    </header>
+
+    <main>
+        <section class="page-header">
+            <h1>Pilot Center</h1>
+
+            <p>
+                Real-time drone telemetry and supervised flight monitoring
+                ·
+                <a
+                    href="/command-center"
+                    class="navigation-link"
+                >
+                    Open Simulator
+                </a>
+            </p>
+        </section>
+
+        <section class="dashboard-grid">
+            <section class="panel map-panel">
+                <h2>Live Drone Map</h2>
+
+                <div id="pilot-map"></div>
+            </section>
+
+            <aside class="panel">
+                <h2>Pilot Drones</h2>
+
+                <div class="summary">
+                    <div class="summary-card">
+                        <div class="summary-label">
+                            Connected
+                        </div>
+
+                        <div
+                            id="drone-count"
+                            class="summary-value"
+                        >
+                            0
+                        </div>
+                    </div>
+
+                    <div class="summary-card">
+                        <div class="summary-label">
+                            Flying
+                        </div>
+
+                        <div
+                            id="flying-count"
+                            class="summary-value"
+                        >
+                            0
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pilot-drone-list">
+                    <div class="empty-state">
+                        Waiting for pilot telemetry...
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </main>
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    ></script>
+
+    <script src="/static/pilot_center.js?v=1"></script>
+</body>
+</html>
