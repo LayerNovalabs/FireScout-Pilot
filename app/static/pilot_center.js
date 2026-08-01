@@ -15,6 +15,7 @@ L.tileLayer(
 
 
 const droneMarkers = new Map();
+const dronePaths = new Map();
 
 let mapHasCentered = false;
 
@@ -32,9 +33,12 @@ function escapeHtml(value) {
 function formatStatus(status) {
     return String(status)
         .replaceAll("_", " ")
-        .replace(/\b\w/g, (character) => {
-            return character.toUpperCase();
-        });
+        .replace(
+            /\b\w/g,
+            (character) => {
+                return character.toUpperCase();
+            }
+        );
 }
 
 
@@ -75,9 +79,15 @@ function getStatusClass(drone) {
 
 
 function formatTimestamp(timestamp) {
-    const parsedTimestamp = new Date(timestamp);
+    const parsedTimestamp = new Date(
+        timestamp
+    );
 
-    if (Number.isNaN(parsedTimestamp.getTime())) {
+    if (
+        Number.isNaN(
+            parsedTimestamp.getTime()
+        )
+    ) {
         return "Unknown";
     }
 
@@ -91,7 +101,9 @@ function updateDroneMarker(drone) {
         drone.longitude,
     ];
 
-    const markerColor = getMarkerColor(drone);
+    const markerColor = getMarkerColor(
+        drone
+    );
 
     const safeDroneId = escapeHtml(
         drone.drone_id
@@ -99,12 +111,14 @@ function updateDroneMarker(drone) {
 
     const popupContent = `
         <strong>${safeDroneId}</strong><br>
-        Status: ${escapeHtml(formatStatus(drone.flight_status))}<br>
+        Status:
+        ${escapeHtml(formatStatus(drone.flight_status))}<br>
         Battery: ${drone.battery_percent}%<br>
         Altitude: ${drone.altitude_m} m<br>
         Speed: ${drone.speed_mps} m/s<br>
         Heading: ${drone.heading_degrees}°<br>
-        Updated: ${escapeHtml(formatTimestamp(drone.timestamp))}
+        Updated:
+        ${escapeHtml(formatTimestamp(drone.timestamp))}
     `;
 
     let marker = droneMarkers.get(
@@ -156,16 +170,99 @@ function updateDroneMarker(drone) {
 }
 
 
+async function refreshDroneHistory(drone) {
+    const encodedDroneId = encodeURIComponent(
+        drone.drone_id
+    );
+
+    const response = await fetch(
+        `/api/drones/${encodedDroneId}/history`,
+        {
+            cache: "no-store",
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Unable to load history for `
+            + `${drone.drone_id}: `
+            + `${response.status}`
+        );
+    }
+
+    const history = await response.json();
+
+    const routePoints = history.map(
+        (telemetry) => [
+            telemetry.latitude,
+            telemetry.longitude,
+        ]
+    );
+
+    let path = dronePaths.get(
+        drone.drone_id
+    );
+
+    if (!path) {
+        path = L.polyline(
+            routePoints,
+            {
+                weight: 4,
+                opacity: 0.8,
+            }
+        ).addTo(map);
+
+        dronePaths.set(
+            drone.drone_id,
+            path
+        );
+    } else {
+        path.setLatLngs(
+            routePoints
+        );
+    }
+}
+
+
 function removeMissingMarkers(drones) {
     const currentDroneIds = new Set(
-        drones.map((drone) => drone.drone_id)
+        drones.map(
+            (drone) => drone.drone_id
+        )
     );
 
     droneMarkers.forEach(
         (marker, droneId) => {
-            if (!currentDroneIds.has(droneId)) {
-                map.removeLayer(marker);
-                droneMarkers.delete(droneId);
+            if (
+                !currentDroneIds.has(
+                    droneId
+                )
+            ) {
+                map.removeLayer(
+                    marker
+                );
+
+                droneMarkers.delete(
+                    droneId
+                );
+            }
+        }
+    );
+
+    dronePaths.forEach(
+        (path, droneId) => {
+            if (
+                !currentDroneIds.has(
+                    droneId
+                )
+            ) {
+                map.removeLayer(
+                    path
+                );
+
+                dronePaths.delete(
+                    droneId
+                );
             }
         }
     );
@@ -209,10 +306,23 @@ function renderDroneCards(drones) {
         "flying-count"
     );
 
+    if (
+        !droneList
+        || !droneCount
+        || !flyingCount
+    ) {
+        return;
+    }
+
     droneCount.textContent = drones.length;
 
     flyingCount.textContent = drones.filter(
-        (drone) => drone.flight_status === "flying"
+        (drone) => {
+            return (
+                drone.flight_status
+                === "flying"
+            );
+        }
     ).length;
 
     droneList.innerHTML = "";
@@ -220,7 +330,8 @@ function renderDroneCards(drones) {
     if (drones.length === 0) {
         droneList.innerHTML = `
             <div class="empty-state">
-                No pilot drones are currently sending telemetry.
+                No pilot drones are currently
+                sending telemetry.
             </div>
         `;
 
@@ -240,10 +351,18 @@ function renderDroneCards(drones) {
 
         card.innerHTML = `
             <div class="drone-header">
-                <span>${escapeHtml(drone.drone_id)}</span>
+                <span>
+                    ${escapeHtml(drone.drone_id)}
+                </span>
 
-                <span class="drone-status ${statusClass}">
-                    ${escapeHtml(formatStatus(drone.flight_status))}
+                <span
+                    class="drone-status ${statusClass}"
+                >
+                    ${escapeHtml(
+                        formatStatus(
+                            drone.flight_status
+                        )
+                    )}
                 </span>
             </div>
 
@@ -276,7 +395,11 @@ function renderDroneCards(drones) {
 
                 <div>
                     <strong>Updated:</strong>
-                    ${escapeHtml(formatTimestamp(drone.timestamp))}
+                    ${escapeHtml(
+                        formatTimestamp(
+                            drone.timestamp
+                        )
+                    )}
                 </div>
             </div>
         `;
@@ -300,14 +423,22 @@ function setConnectionStatus(
         "connection-text"
     );
 
+    if (!dot || !text) {
+        return;
+    }
+
     dot.className = "status-dot";
 
     if (status === "online") {
-        dot.classList.add("online");
+        dot.classList.add(
+            "online"
+        );
     }
 
     if (status === "error") {
-        dot.classList.add("error");
+        dot.classList.add(
+            "error"
+        );
     }
 
     text.textContent = message;
@@ -340,6 +471,14 @@ async function refreshPilotDrones() {
                 drone
             );
         });
+
+        await Promise.all(
+            drones.map((drone) => {
+                return refreshDroneHistory(
+                    drone
+                );
+            })
+        );
 
         removeMissingMarkers(
             drones
