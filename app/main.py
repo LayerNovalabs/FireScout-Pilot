@@ -67,6 +67,7 @@ from app.services.operational_log_service import (
 from app.services.pilot_telemetry_service import (
     get_all_pilot_telemetry,
     get_pilot_telemetry,
+    get_pilot_telemetry_history,
     save_pilot_telemetry,
 )
 from app.services.scenario_manager import (
@@ -547,3 +548,28 @@ def get_pilot_drone(
         )
 
     return telemetry
+@app.get(
+    "/api/drones/{drone_id}/history",
+    response_model=list[PilotTelemetry],
+)
+def get_pilot_drone_history(
+    drone_id: str,
+) -> list[PilotTelemetry]:
+    """
+    Devuelve el historial reciente
+    de telemetría de un dron piloto.
+    """
+
+    telemetry = get_pilot_telemetry(
+        drone_id
+    )
+
+    if telemetry is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Drone telemetry not found",
+        )
+
+    return get_pilot_telemetry_history(
+        drone_id
+    )

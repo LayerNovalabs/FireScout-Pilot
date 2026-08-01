@@ -5,9 +5,17 @@ from app.models.pilot_telemetry import (
 )
 
 
+MAX_HISTORY_POINTS = 500
+
+
 _TELEMETRY_BY_DRONE: dict[
     str,
     PilotTelemetry,
+] = {}
+
+_TELEMETRY_HISTORY_BY_DRONE: dict[
+    str,
+    list[PilotTelemetry],
 ] = {}
 
 _TELEMETRY_LOCK = Lock()
@@ -17,14 +25,31 @@ def save_pilot_telemetry(
     telemetry: PilotTelemetry,
 ) -> PilotTelemetry:
     """
-    Guarda o actualiza la última telemetría
-    recibida de un dron.
+    Guarda la última telemetría y añade
+    la lectura al historial del dron.
     """
 
     with _TELEMETRY_LOCK:
         _TELEMETRY_BY_DRONE[
             telemetry.drone_id
         ] = telemetry
+
+        history = (
+            _TELEMETRY_HISTORY_BY_DRONE
+            .setdefault(
+                telemetry.drone_id,
+                [],
+            )
+        )
+
+        history.append(
+            telemetry
+        )
+
+        if len(history) > MAX_HISTORY_POINTS:
+            del history[
+                :-MAX_HISTORY_POINTS
+            ]
 
     return telemetry
 
@@ -56,10 +81,29 @@ def get_pilot_telemetry(
         )
 
 
+def get_pilot_telemetry_history(
+    drone_id: str,
+) -> list[PilotTelemetry]:
+    """
+    Devuelve el historial de posiciones
+    almacenado para un dron.
+    """
+
+    with _TELEMETRY_LOCK:
+        return list(
+            _TELEMETRY_HISTORY_BY_DRONE.get(
+                drone_id,
+                [],
+            )
+        )
+
+
 def clear_pilot_telemetry() -> None:
     """
-    Elimina toda la telemetría piloto guardada.
+    Elimina la última telemetría y todos
+    los historiales almacenados.
     """
 
     with _TELEMETRY_LOCK:
         _TELEMETRY_BY_DRONE.clear()
+        _TELEMETRY_HISTORY_BY_DRONE.clear()
