@@ -17,6 +17,9 @@ L.tileLayer(
 const droneMarkers = new Map();
 const dronePaths = new Map();
 
+const STALE_AFTER_SECONDS = 5;
+const OFFLINE_AFTER_SECONDS = 15;
+
 let mapHasCentered = false;
 
 
@@ -42,42 +45,6 @@ function formatStatus(status) {
 }
 
 
-function getMarkerColor(drone) {
-    if (drone.flight_status === "error") {
-        return "#ef4444";
-    }
-
-    if (
-        drone.battery_percent <= 20
-        || drone.flight_status === "returning_home"
-    ) {
-        return "#f59e0b";
-    }
-
-    if (drone.flight_status === "flying") {
-        return "#22c55e";
-    }
-
-    return "#38bdf8";
-}
-
-
-function getStatusClass(drone) {
-    if (drone.flight_status === "error") {
-        return "error";
-    }
-
-    if (
-        drone.battery_percent <= 20
-        || drone.flight_status === "returning_home"
-    ) {
-        return "warning";
-    }
-
-    return "";
-}
-
-
 function formatTimestamp(timestamp) {
     const parsedTimestamp = new Date(
         timestamp
@@ -95,6 +62,123 @@ function formatTimestamp(timestamp) {
 }
 
 
+function getTelemetryConnectionState(timestamp) {
+    const parsedTimestamp = new Date(
+        timestamp
+    );
+
+    if (
+        Number.isNaN(
+            parsedTimestamp.getTime()
+        )
+    ) {
+        return {
+            status: "offline",
+            label: "Offline",
+            ageSeconds: null,
+        };
+    }
+
+    const ageMilliseconds = Math.max(
+        0,
+        Date.now() - parsedTimestamp.getTime()
+    );
+
+    const ageSeconds = Math.floor(
+        ageMilliseconds / 1000
+    );
+
+    if (
+        ageSeconds > OFFLINE_AFTER_SECONDS
+    ) {
+        return {
+            status: "offline",
+            label: "Offline",
+            ageSeconds,
+        };
+    }
+
+    if (
+        ageSeconds > STALE_AFTER_SECONDS
+    ) {
+        return {
+            status: "stale",
+            label: "Stale",
+            ageSeconds,
+        };
+    }
+
+    return {
+        status: "online",
+        label: "Online",
+        ageSeconds,
+    };
+}
+
+
+function getMarkerColor(drone) {
+    const connectionState =
+        getTelemetryConnectionState(
+            drone.timestamp
+        );
+
+    if (
+        connectionState.status === "offline"
+        || drone.flight_status === "error"
+    ) {
+        return "#ef4444";
+    }
+
+    if (
+        connectionState.status === "stale"
+        || drone.battery_percent <= 20
+        || drone.flight_status === "returning_home"
+    ) {
+        return "#f59e0b";
+    }
+
+    if (drone.flight_status === "flying") {
+        return "#22c55e";
+    }
+
+    return "#38bdf8";
+}
+
+
+function getStatusClass(drone) {
+    const connectionState =
+        getTelemetryConnectionState(
+            drone.timestamp
+        );
+
+    if (
+        connectionState.status === "offline"
+        || drone.flight_status === "error"
+    ) {
+        return "error";
+    }
+
+    if (
+        connectionState.status === "stale"
+        || drone.battery_percent <= 20
+        || drone.flight_status === "returning_home"
+    ) {
+        return "warning";
+    }
+
+    return "";
+}
+
+
+function getConnectionAgeText(connectionState) {
+    if (connectionState.ageSeconds === null) {
+        return "Unknown";
+    }
+
+    return `${connectionState.ageSeconds} s`;
+}
+
+
 function updateDroneMarker(drone) {
     const position = [
         drone.latitude,
@@ -105,14 +189,23 @@ function updateDroneMarker(drone) {
         drone
     );
 
+    const connectionState =
+        getTelemetryConnectionState(
+            drone.timestamp
+        );
+
     const safeDroneId = escapeHtml(
         drone.drone_id
     );
 
     const popupContent = `
         <strong>${safeDroneId}</strong><br>
-        Status:
+        Flight status:
         ${escapeHtml(formatStatus(drone.flight_status))}<br>
+        Connection:
+        ${escapeHtml(connectionState.label)}<br>
+        Last update:
+        ${escapeHtml(getConnectionAgeText(connectionState))} ago<br>
         Battery: ${drone.battery_percent}%<br>
         Altitude: ${drone.altitude_m} m<br>
         Speed: ${drone.speed_mps} m/s<br>
@@ -314,16 +407,38 @@ function renderDroneCards(drones) {
         return;
     }
 
-    droneCount.textContent = drones.length;
-
-    flyingCount.textContent = drones.filter(
+    const connectedDrones = drones.filter(
         (drone) => {
+            const connectionState =
+                getTelemetryConnectionState(
+                    drone.timestamp
+                );
+
             return (
-                drone.flight_status
-                === "flying"
+                connectionState.status !== "offline"
             );
         }
-    ).length;
+    );
+
+    const flyingDrones = drones.filter(
+        (drone) => {
+            const connectionState =
+                getTelemetryConnectionState(
+                    drone.timestamp
+                );
+
+            return (
+                drone.flight_status === "flying"
+                && connectionState.status !== "offline"
+            );
+        }
+    );
+
+    droneCount.textContent =
+        connectedDrones.length;
+
+    flyingCount.textContent =
+        flyingDrones.length;
 
     droneList.innerHTML = "";
 
@@ -349,6 +464,11 @@ function renderDroneCards(drones) {
             drone
         );
 
+        const connectionState =
+            getTelemetryConnectionState(
+                drone.timestamp
+            );
+
         card.innerHTML = `
             <div class="drone-header">
                 <span>
@@ -358,15 +478,34 @@ function renderDroneCards(drones) {
                 <span
                     class="drone-status ${statusClass}"
                 >
+                    ${escapeHtml(connectionState.label)}
+                </span>
+            </div>
+
+            <div class="drone-details">
+                <div>
+                    <strong>Flight status:</strong>
                     ${escapeHtml(
                         formatStatus(
                             drone.flight_status
                         )
                     )}
-                </span>
-            </div>
+                </div>
 
-            <div class="drone-details">
+                <div>
+                    <strong>Connection:</strong>
+                    ${escapeHtml(connectionState.label)}
+                </div>
+
+                <div>
+                    <strong>Last signal:</strong>
+                    ${escapeHtml(
+                        getConnectionAgeText(
+                            connectionState
+                        )
+                    )} ago
+                </div>
+
                 <div>
                     <strong>Battery:</strong>
                     ${drone.battery_percent}%
